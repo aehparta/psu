@@ -4,7 +4,7 @@ MCU_AVR = atmega328p
 F_CPU_AVR = 8000000
 LDFLAGS_AVR += -Wl,-u,vfprintf -lprintf_flt
 
-USE = I2C GPIO LOG
+USE = I2C GPIO LOG ADC
 
 # init
 include $(LIBE_PATH)/init.mk
