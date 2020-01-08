@@ -48,23 +48,25 @@ int main(void)
 	ERROR_IF_R(p_init(), -1, "base initialization failed");
 
 	while (1) {
-		float Uin = 0.0, Uout = 0.0, Iout = 0.0;
+		float Uin = 0.0, Uout = 0.0, Iout = 0.0, Tbat = 0.0;
 		os_wdt_reset();
 
 		for (int8_t i = 0; i < CONVERSIONS; i++) {
 			Uin += adci_read_raw(&adc, 6);
 			Uout += adci_read_raw(&adc, 3);
 			Iout += adci_read_raw(&adc, 7);
+			Tbat += (adci_read_raw(&adc, 2) - 508.0);
 		}
 		Uin /= (29.86 * CONVERSIONS);
 		Uout /= (29.86 * CONVERSIONS);
 		Iout /= (190.0 * CONVERSIONS);
-
+		Tbat /= (6.6949 * CONVERSIONS);
+		// Tbat /= CONVERSIONS;
 
 		// i2c_write_byte(&dev, 0x00);
 		// i2c_read(&dev, b, 16);
 		// HEX_DUMP(b, 16);
-		DEBUG_MSG("adc: %2.2f %2.2f %1.2f", Uin, Uout, Iout);
+		DEBUG_MSG("adc: %2.2f %2.2f %1.2f %2.0f", Uin, Uout, Iout, Tbat);
 		os_delay_ms(1000);
 	}
 
