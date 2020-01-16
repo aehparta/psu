@@ -31,9 +31,9 @@
 #define UOUT_TOP_DEFAULT            14.4
 #define UOUT_FLOAT_DEFAULT          13.8
 #define BAT_C_DEFAULT               1.2
-#define BAT_LOW_DEFAULT             11.5
-#define BAT_FAULTY_DEFAULT          10.5
-#define BAT_NEED_TO_TOP_DEFAULT     12.6 /* 2.1 volts per cell is around 90% of capacity left */
+#define BAT_LOW_DEFAULT             10.8 /* 1.8v/cell is recommeded cut-off */
+#define BAT_FAULTY_DEFAULT          10.0 /* 1.666v/cell, could be lower, even 9 volts (1.5v/cell), but lets stick with higher number */
+#define BAT_NEED_TO_TOP_DEFAULT     12.6 /* 2.1v/cell is around 90% of capacity left */
 #define BAT_MAX_CHG_C_DEFAULT       0.3
 #define BAT_CHG_TOP_FIN_C_DEFAULT   0.05
 #define SETTLE_DELAY_DEFAULT        5 /* seconds */
@@ -85,7 +85,7 @@ void set_settle_wait(void)
 	settle_delay = nvm_read_byte(NVM_A_SETTLE_DELAY, SETTLE_DELAY_DEFAULT);
 }
 
-bool check_faulty(float voltage)
+bool check_faulty_or_disconnect(float voltage)
 {
 	/* check if battery disconnected */
 	if (voltage < 1.0) {
@@ -154,6 +154,15 @@ void check(void)
 		return;
 	}
 
+	/* if battery has been marked faulty, wait for disconnect */
+	if (mode == MODE_BAT_FAULTY) {
+		if (Uout < 1.0) {
+			mode = MODE_BAT_DISCONNECTED;
+			set_settle_wait();
+		}
+		return;
+	}
+
 	/* if input is too low or disconnected */
 	if ((Uin - INPUT_TOO_LOW_DIF) < Uout) {
 		/* output disable,
@@ -162,7 +171,7 @@ void check(void)
 		 */
 		act4751_set_main_voltage(&dev, 0.1);
 		/* check if battery is faulty */
-		if (check_faulty(Uout)) {
+		if (check_faulty_or_disconnect(Uout)) {
 			return;
 		}
 		/* check if battery voltage is too low = battery is empty or was already declared empty (and has just been "recovered" a little) */
@@ -181,7 +190,7 @@ void check(void)
 
 	if (mode == MODE_BAT_MONITOR) {
 		/* check if battery is faulty */
-		if (check_faulty(Uout)) {
+		if (check_faulty_or_disconnect(Uout)) {
 			return;
 		}
 		/* check if voltage is above topping level */
@@ -194,7 +203,7 @@ void check(void)
 	/* if we are not in any charging state, determine which state we should change into */
 	if (mode != MODE_CHARGE_TOP && mode != MODE_CHARGE_FLOAT) {
 		/* main buck is disabled in other modes, check battery first */
-		if (check_faulty(Uout)) {
+		if (check_faulty_or_disconnect(Uout)) {
 			return;
 		}
 		/* when coming here after using battery or faulty battery/disconnection, wait a little for things to settle */
@@ -240,6 +249,13 @@ void check(void)
 			set_settle_wait();
 			return;
 		}
+		/* check if topping has taken too long, battery is then faulty */
+		if (charge_top_time > (uint32_t)(1.5 * 3600.0 / bat_chg_c)) {
+			CRIT_MSG("battery topping time limit exceeded, marking battery as faulty");
+			mode = MODE_BAT_FAULTY;
+			return;
+		}
+		/* check if finished */
 		float fin_i = bat_c * bat_chg_top_fin_c;
 		if (fin_i > Iout) {
 			INFO_MSG("ended topping charge, time taken: %us", charge_top_time);
