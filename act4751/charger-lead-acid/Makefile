@@ -5,6 +5,7 @@ F_CPU_AVR = 8000000
 LDFLAGS_AVR += -Wl,-u,vfprintf -lprintf_flt
 
 USE = I2C GPIO LOG ADC NVM AVR_CLOCK_TIMER1_100HZ
+DEFINES = LOG_BAUD=38400
 
 # init
 include $(LIBE_PATH)/init.mk
