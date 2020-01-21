@@ -17,6 +17,7 @@
 
 #define INPUT_TOO_LOW_DIF   0.5 /* volts */
 #define MAX_CHARGE_I        2.0 /* amperes */
+#define BAT_TEMP_DANGER     50.0 /* degrees celsius */
 
 #define NVM_A_UOUT_TOP              (float*)0 /* float, 4 bytes */
 #define NVM_A_UOUT_FLOAT            (float*)4 /* float, 4 bytes */
@@ -26,16 +27,18 @@
 #define NVM_A_BAT_NEED_TO_TOP       (float*)20 /* float, 4 bytes */
 #define NVM_A_BAT_MAX_CHG_C         (float*)24 /* float, 4 bytes */
 #define NVM_A_BAT_CHG_TOP_FIN_C     (float*)28 /* float, 4 bytes */
-#define NVM_A_SETTLE_DELAY          (uint8_t *)32 /* seconds, 1 byte */
+#define NVM_A_BAT_CHG_TEMP_COEFF    (float*)32 /* float, 4 bytes */
+#define NVM_A_SETTLE_DELAY          (uint8_t *)36 /* seconds, 1 byte */
 
 #define UOUT_TOP_DEFAULT            14.4
 #define UOUT_FLOAT_DEFAULT          13.8
 #define BAT_C_DEFAULT               1.2
-#define BAT_LOW_DEFAULT             10.8 /* 1.8v/cell is recommeded cut-off */
-#define BAT_FAULTY_DEFAULT          10.0 /* 1.666v/cell, could be lower, even 9 volts (1.5v/cell), but lets stick with higher number */
-#define BAT_NEED_TO_TOP_DEFAULT     12.6 /* 2.1v/cell is around 90% of capacity left */
-#define BAT_MAX_CHG_C_DEFAULT       0.3
+#define BAT_LOW_DEFAULT             10.8 /* 1.8V/cell is recommeded cut-off */
+#define BAT_FAULTY_DEFAULT          10.0 /* 1.666V/cell, could be lower, even 9V (1.5V/cell), but lets stick with higher number */
+#define BAT_NEED_TO_TOP_DEFAULT     12.6 /* 2.1V/cell is around 90% of capacity left */
+#define BAT_MAX_CHG_C_DEFAULT       0.3 /* charge current can be higher, but lets use this safe value, usual recommendation by manufacturers is around 0.25C */
 #define BAT_CHG_TOP_FIN_C_DEFAULT   0.05
+#define BAT_CHG_TEMP_COEFF_DEFAULT  (-0.003 * 6) /* -3mV/°C/cell charge temperature coefficient seems to be the recommended default (zero at 25°C) */
 #define SETTLE_DELAY_DEFAULT        5 /* seconds */
 
 
@@ -139,13 +142,23 @@ void check(void)
 	}
 
 	// printf("Uin: %0.2fV, Uout: %0.2fV, Iout: %0.3fA, Tbat: %0.1fC°\r\n", Uin, Uout, Iout, Tbat);
-	static int once_per_minute = 0;
+	static uint32_t once_per_minute = 0;
 	if (once_per_minute < time(NULL)) {
-		printf("Uin: %0.2fV, Uout: %0.2fV, Iout: %0.3fA, Tbat: %0.1fC°\r\n", Uin, Uout, Iout, Tbat);
+		printf("Uin: %0.2fV, Uout: %0.2fV, Iout: %0.3fA, Tbat: %0.1f°C\r\n", Uin, Uout, Iout, Tbat);
 		if (once_per_minute == 0) {
 			once_per_minute = time(NULL);
 		}
 		once_per_minute += 60;
+	}
+
+	/* if temperature is too high, check as faulty */
+	if (Tbat > BAT_TEMP_DANGER) {
+		CRIT_MSG("battery temperature in danger zone: %0.1f°C", Tbat);
+		mode = MODE_BAT_FAULTY;
+		act4751_set_main_voltage(&dev, 0.1);
+		act4751_set_main_current(&dev, 0.1);
+		output(false);
+		return;
 	}
 
 	/* wait for settle delay first (set on boot and some other situations) */
@@ -229,8 +242,9 @@ void check(void)
 	/* get charging options */
 	float bat_c = nvm_read_float(NVM_A_BAT_C, BAT_C_DEFAULT);
 	float bat_chg_c = nvm_read_float(NVM_A_BAT_MAX_CHG_C, BAT_MAX_CHG_C_DEFAULT);
-	float bat_u_top = nvm_read_float(NVM_A_UOUT_TOP, UOUT_TOP_DEFAULT);
-	float bat_u_float = nvm_read_float(NVM_A_UOUT_FLOAT, UOUT_FLOAT_DEFAULT);
+	float bat_chg_temp_coeff = nvm_read_float(NVM_A_BAT_CHG_TEMP_COEFF, BAT_CHG_TEMP_COEFF_DEFAULT) * (Tbat - 25.0);
+	float bat_u_top = nvm_read_float(NVM_A_UOUT_TOP, UOUT_TOP_DEFAULT) + bat_chg_temp_coeff;
+	float bat_u_float = nvm_read_float(NVM_A_UOUT_FLOAT, UOUT_FLOAT_DEFAULT) + bat_chg_temp_coeff;
 	float bat_chg_top_fin_c = nvm_read_float(NVM_A_BAT_CHG_TOP_FIN_C, BAT_CHG_TOP_FIN_C_DEFAULT);
 	float chg_i = bat_c * bat_chg_c;
 
