@@ -3,10 +3,10 @@
 TARGET = X86
 
 # enable log and display
-USE += LOG DISPLAY
-USE_X86 += I2C GPIO FTDI
+USE += LOG DISPLAY GPIO
+USE_X86 += I2C FTDI
 USE_AVR += I2C
-
+USE_RPI += I2C
 USE_ESP32 += I2C
 
 FONTS = all

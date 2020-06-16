@@ -55,7 +55,7 @@ int app_main(int argc, char *argv[])
 int main(int argc, char *argv[])
 #endif
 {
-	void *context = CFG_I2C_CONTEXT;
+	void *context = NULL;
 
 	/* base init */
 	os_init();
@@ -66,7 +66,7 @@ int main(int argc, char *argv[])
 	ERROR_IF_R(argc < 2, 1, "Give i2c device as and argument\nExample: ./display-x86.elf /dev/i2c-3");
 	context = argv[1];
 #endif
-	ERROR_IF_R(i2c_master_open(&i2c, context, CFG_I2C_FREQUENCY, CFG_I2C_SCL, CFG_I2C_SDA), 1, "unable to open i2c device");
+	ERROR_IF_R(i2c_master_open(&i2c, context, 400000, 0, 0), 1, "unable to open i2c device");
 	ERROR_IF_R(ssd1306_i2c_open(&display, &i2c, 0, 0, 0), 1, "unable to open ssd1306 display");
 	optctl(&display, DISPLAY_OPT_SET_BUFFER, buffer);
 	draw_fill(&display, 0, 0, 128, 64, 0x000000);
