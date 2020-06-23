@@ -1,6 +1,5 @@
 <?php
 
-
 if ($_SERVER['SCRIPT_NAME'] == '/') {
     readfile(__DIR__ . '/index.html');
 } else if ($_SERVER['SCRIPT_NAME'] == '/api/data') {
@@ -14,8 +13,11 @@ if ($_SERVER['SCRIPT_NAME'] == '/') {
         $tt = floatval(basename($file, '.capture'));
         if ($tt > $t) {
             $f = fopen($file, 'r');
-            // if (!flock($f, LOCK_EX)) {
-            // }
+            if (!flock($f, LOCK_EX)) {
+                $bdata = null;
+                break;
+            }
+            flock($f, LOCK_UN);
             $bdata = fread($f, filesize($file));
             fclose($f);
             $t = $tt;
@@ -23,7 +25,10 @@ if ($_SERVER['SCRIPT_NAME'] == '/') {
         }
     }
 
-    $data = array_values(unpack('g*', $bdata));
+    $data = null;
+    if ($bdata) {
+        $data = array_values(unpack('g*', $bdata));
+    }
 
     echo json_encode(['t' => $t, 'data' => $data]);
 } else if (file_exists(__DIR__ . $_SERVER['SCRIPT_NAME'])) {

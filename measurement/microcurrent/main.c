@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <unistd.h>
 #include <libe/libe.h>
 
@@ -17,9 +18,12 @@
 #define VREF                        3.3L
 #define OFFSET                      885.0L
 #else
-#define VREF                        2.555L
-#define OFFSET                      1010.0L
+#define VREF                        (2.555L / 3.298L)
+#define OFFSET                      60.0L
 #endif
+
+#define INTERVAL                    0.5
+#define SAMPLE_COUNT                1
 
 #define PWM_PERIOD                  "100"
 #define PWM_DUTY_CYCLE              "50"
@@ -117,46 +121,59 @@ int main(void)
 	os_sleepf(1.0);
 
 	/* read */
-	float min = -1e6, max = -1e6;
 	double sum = 0;
 	int count = 0;
-	FILE *cap_fd = NULL;
-	os_time_t cap_t = os_timef() + 1.0;
+	os_time_t t = os_timef() + INTERVAL;
+	float samples[SAMPLE_COUNT];
+	int sample_c = 0;
+
+	// int cap_fd = -1;
+	// os_time_t cap_t = os_timef() + 0.5;
+
 	while (1) {
 		while (gpio_read(19));
 
 		int32_t x = mcp356x_rd(&device) / 256.0L + OFFSET;
- 		float U = (float)((double)x / (double)0x7fffff * VREF / 16.0L);
-
-		min = min <= -1e6 ? x : min;
-		max = max <= -1e6 ? x : max;
-		min = x < min ? x : min;
-		max = x > max ? x : max;
-
-
-		sum += U;
+		sum += ((double)x / (double)0x7fffff * VREF / 16.0L);
 		count++;
-		if (count >= 1) {
+
+		if (t < os_timef()) {
 			sum /= count;
-			printf("%+12.1f %+12d %+12.0f %+12.0f %+12.0f\n", sum * 1000000.0, x, min, max, max - min);
-			sum = 0;
+			samples[sample_c++] = sum;
+			if (sample_c >= SAMPLE_COUNT) {
+				struct timespec tp;
+				char fs[256];
+				clock_gettime(CLOCK_REALTIME, &tp);
+				sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
+				int fd = open(fs, O_CREAT | O_WRONLY, 0644);
+				write(fd, samples, sizeof(samples));
+				close(fd);
+				sample_c = 0;
+			}
+
+			printf("%+12.1f uA\n", sum * 1000000.0);
+
+			sum = 0.0;
 			count = 0;
+			t += INTERVAL;
 		}
 
 
-		if (!cap_fd) {
-			struct timespec tp;
-			char fs[256];
-			clock_gettime(CLOCK_REALTIME, &tp);
-			sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
-			cap_fd = fopen(fs, "w");
-		}
-		fwrite(&U, sizeof(U), 1, cap_fd);
-		if (cap_t < os_timef()) {
-			fclose(cap_fd);
-			cap_fd = NULL;
-			cap_t += 1.0;
-		}
+		// if (cap_fd < 0) {
+		// 	struct timespec tp;
+		// 	char fs[256];
+		// 	clock_gettime(CLOCK_REALTIME, &tp);
+		// 	sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
+		// 	cap_fd = open(fs, O_CREAT | O_WRONLY, 0644);
+		// 	flock(cap_fd, LOCK_EX);
+		// }
+		// write(cap_fd, &U, sizeof(U));
+		// if (cap_t < os_timef()) {
+		// 	flock(cap_fd, LOCK_UN);
+		// 	close(cap_fd);
+		// 	cap_fd = -1;
+		// 	cap_t += 0.5;
+		// }
 	}
 
 	/* free */

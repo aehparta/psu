@@ -1,28 +1,37 @@
-var timestamp = Date.now() - 3600000;
+var timestamp = Date.now();
 var chart;
 var dps = [];
-var x = 0;
-var x_plus = 0;
+var t_div = 0;
+var t_max = 15.0;
+var min = -0.000001, max = 0.00001;
 
 
 function update(data) {
 	for (var i = 0; i < data.length; i++) {
 		dps.push({
-			x: x,
+			x: 0,
 			y: data[i]
 		});
-		x += x_plus;
 	}
+	while ((dps.length * t_div) > t_max) {
+		dps.shift();
+	}
+	for (var i = 0; i < dps.length; i++) {
+		dps[i].x = i * t_div;
+	}
+	chart.options.axisY.maximum = max;
+	chart.options.axisY.minimum = min;
 	chart.render();
 }
 
 function fetch() {
 	$.getJSON('api/data?t=' + timestamp, function(data) {
 		if (data.t === undefined || data.t <= timestamp) {
+			setTimeout(fetch, 500);
 			return;
 		}
-		if (x_plus == 0) {
-			x_plus = 1 / data.data.length;
+		if (t_div == 0) {
+			t_div = 0.5 / data.data.length;
 		}
 		if (data.data.length > 0) {
 			update(data.data);
@@ -42,7 +51,9 @@ $(document).ready(function() {
 			text: "Current"
 		},
 		axisY: {
-			includeZero: false
+			includeZero: false,
+			// maximum: 0.00001,
+			// minimum: -0.00001,
 		},
 		data: [{
 			type: "spline",
