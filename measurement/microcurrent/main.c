@@ -98,7 +98,7 @@ int main(void)
 
 	/* OSR */
 	// optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_16384);
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_1024);
+	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_256);
 
 	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3);
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16);
@@ -126,7 +126,7 @@ int main(void)
 		while (gpio_read(19));
 
 		int32_t x = mcp356x_rd(&device) / 256.0L + OFFSET;
- 		float U = (float)((double)x / (double)0x7fffff * VREF / 16.0L * 1000000.0L);
+ 		float U = (float)((double)x / (double)0x7fffff * VREF / 16.0L);
 
 		min = min <= -1e6 ? x : min;
 		max = max <= -1e6 ? x : max;
@@ -136,9 +136,9 @@ int main(void)
 
 		sum += U;
 		count++;
-		if (count >= 10) {
+		if (count >= 1) {
 			sum /= count;
-			printf("%+12.1f %+12d %+12.0f %+12.0f %+12.0f\n", sum, x, min, max, max - min);
+			printf("%+12.1f %+12d %+12.0f %+12.0f %+12.0f\n", sum * 1000000.0, x, min, max, max - min);
 			sum = 0;
 			count = 0;
 		}
@@ -148,7 +148,7 @@ int main(void)
 			struct timespec tp;
 			char fs[256];
 			clock_gettime(CLOCK_REALTIME, &tp);
-			sprintf(fs, "capture-%012lu.%09lu", tp.tv_sec, tp.tv_nsec);
+			sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
 			cap_fd = fopen(fs, "w");
 		}
 		fwrite(&U, sizeof(U), 1, cap_fd);
