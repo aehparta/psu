@@ -12,15 +12,8 @@
 #include <libe/libe.h>
 
 
-// #define VREF_VCC
-
-#ifdef VREF_VCC
-#define VREF                        3.3L
-#define OFFSET                      885.0L
-#else
 #define MULTIPLIER                  (1.0785L / 16.0)
 #define OFFSET                      1350.0L
-#endif
 
 #define INTERVAL                    0.5
 #define SAMPLE_COUNT                100000
