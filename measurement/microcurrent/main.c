@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <poll.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <libe/libe.h>
 
 
@@ -35,15 +37,18 @@
 #define I2C_FREQUENCY               100000
 
 #define IRQ_PIN                     19
-#define IRQ_PIN_VALUE_FILE          "/sys/class/gpio/gpio19/value"
-#define IRQ_PIN_EDGE_FILE           "/sys/class/gpio/gpio19/edge"
+
+#define INFLUXDB_IP                 "127.0.0.1"
+#define INFLUXDB_UDP_PORT           8089
 
 
 /* globals */
 struct spi_master master;
 struct spi_device device;
 pthread_t display_thread;
-int irq_pin_fd = -1;
+int influxdb_udp_socket = -1;
+struct sockaddr_in influxdb_addr;
+
 
 /* written from main and read from display update */
 static volatile float I = 0, Iavg = 0, Ipeak = 0;
@@ -114,6 +119,7 @@ void *display_thread_func(void *p)
 	optctl(&display, DISPLAY_OPT_SET_BUFFER, buffer);
 
 	/* start filling display with values */
+	DEBUG_MSG("lcd display update thread started");
 	while (exec) {
 		draw_fill(&display, 0, 0, 128, 64, 0x000000);
 
@@ -131,7 +137,7 @@ void *display_thread_func(void *p)
 		draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
 
 		/* average and peak */
-		draw_string(&display, &g_sFontFixed6x8, "Iavg 999uA Ipeak 10.0mA", -1, 0, 48, true);
+		draw_string(&display, &g_sFontFixed6x8, "Iavg 9uA Ipeak 1.0mA", -1, 0, 48, true);
 
 		/* sampling time */
 		time_t st = time(NULL) - sampling_started;
@@ -142,6 +148,7 @@ void *display_thread_func(void *p)
 		os_sleepf(0.3);
 	}
 
+	DEBUG_MSG("lcd display thread exiting");
 	display_close(&display);
 	i2c_master_close(&i2c);
 	return NULL;
@@ -160,9 +167,13 @@ int p_init(char argc, char *argv[])
 
 	/* irq gpio */
 	gpio_input(IRQ_PIN);
-	sys_class_write(IRQ_PIN_EDGE_FILE, "rising");
-	irq_pin_fd = open(IRQ_PIN_VALUE_FILE, O_RDONLY | O_NONBLOCK);
-	ERROR_IF_R(irq_pin_fd < 0, -1, "failed to open interrupt pin value file: %s", IRQ_PIN_VALUE_FILE);
+
+	/* udp socket and address for influxdb data writing */
+	influxdb_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
+	ERROR_IF_R(influxdb_udp_socket < 0, -1, "failed to create influxdb udp socket");
+	influxdb_addr.sin_family = AF_INET;
+	influxdb_addr.sin_addr.s_addr = inet_addr(INFLUXDB_IP);
+	influxdb_addr.sin_port = htons(INFLUXDB_UDP_PORT);
 
 	/* open ft232h type device and try to see if it has a nrf24l01+ connected to it through mpsse-spi */
 	ERROR_IF_R(spi_master_open(
@@ -205,16 +216,11 @@ void p_exit(int code)
 	pwm_quit();
 	log_quit();
 	os_quit();
-	if (irq_pin_fd >= 0) {
-		close(irq_pin_fd);
-	}
 	exit(code);
 }
 
 int main(int argc, char *argv[])
 {
-	struct pollfd fdset[1];
-
 	/* init */
 	if (p_init(argc, argv)) {
 		CRIT_MSG("initialization failed");
@@ -229,83 +235,47 @@ int main(int argc, char *argv[])
 	double sum = 0;
 	int count = 0;
 	os_time_t t = os_timef() + INTERVAL;
-	float samples[SAMPLE_COUNT];
-	int sample_c = 0;
+	struct timespec tp;
+	int32_t x;
+	double xd;
+	char line[1024];
+	int n;
 
 	/* start main application loop */
 	sampling_started = time(NULL);
 	while (1) {
-		/* wait for sample to be ready and read */
-		while (gpio_read(19));
-		int32_t x = mcp356x_rd(&device) / 256.0L + OFFSET;
+		/* wait for sample to be ready */
+		while (gpio_read(IRQ_PIN)) {
+			os_sleepf(0.001);
+		}
+
+		/* get timestamp as soon as possible */
+		clock_gettime(CLOCK_REALTIME, &tp);
+
+		/* get sample */
+		x = mcp356x_rd(&device) / 256.0L + OFFSET;
+		xd = ((double)x / (double)0x7fffff * MULTIPLIER);
 
 		/* average calculation */
-		sum += ((double)x / (double)0x7fffff * MULTIPLIER);
+		sum += xd;
 		count++;
 
-		/* samples to send to web interface */
-		samples[sample_c++] = (float)((double)x / (double)0x7fffff * MULTIPLIER);
+		/* send to influxdb */
+		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", xd, tp.tv_sec, tp.tv_nsec);
+		sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
 
-		/* send/show on interval */
+		/* update value later shown on display with interval so we get an average */
 		if (t < os_timef()) {
-			/* write samples to file for web interface to read */
-			struct timespec tp;
-			char fs[256];
-			clock_gettime(CLOCK_REALTIME, &tp);
-			snprintf(fs, sizeof(fs), "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
-			int fd = open(fs, O_CREAT | O_WRONLY, 0644);
-			write(fd, samples, sizeof(float) * sample_c);
-			close(fd);
-
 			/* calculate average */
 			sum /= count;
 			I = (float)sum;
 			printf("%+12.1f uA, samples: %d\n", sum * 1000000.0, count);
 
 			/* reset all */
-			sample_c = 0;
 			sum = 0.0;
 			count = 0;
 			t += INTERVAL;
 		}
-
-		// if (t < os_timef()) {
-		// 	sum /= count;
-		// 	samples[sample_c++] = sum;
-		// 	if (sample_c >= SAMPLE_COUNT) {
-		// 		struct timespec tp;
-		// 		char fs[256];
-		// 		clock_gettime(CLOCK_REALTIME, &tp);
-		// 		sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
-		// 		int fd = open(fs, O_CREAT | O_WRONLY, 0644);
-		// 		write(fd, samples, sizeof(samples));
-		// 		close(fd);
-		// 		sample_c = 0;
-		// 	}
-
-		// 	printf("%+12.1f uA\n", sum * 1000000.0);
-
-		// 	sum = 0.0;
-		// 	count = 0;
-		// 	t += INTERVAL;
-		// }
-
-
-		// if (cap_fd < 0) {
-		// 	struct timespec tp;
-		// 	char fs[256];
-		// 	clock_gettime(CLOCK_REALTIME, &tp);
-		// 	sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
-		// 	cap_fd = open(fs, O_CREAT | O_WRONLY, 0644);
-		// 	flock(cap_fd, LOCK_EX);
-		// }
-		// write(cap_fd, &U, sizeof(U));
-		// if (cap_t < os_timef()) {
-		// 	flock(cap_fd, LOCK_UN);
-		// 	close(cap_fd);
-		// 	cap_fd = -1;
-		// 	cap_t += 0.5;
-		// }
 	}
 
 	p_exit(EXIT_SUCCESS);

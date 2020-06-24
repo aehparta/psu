@@ -1,49 +1,44 @@
-var timestamp = Date.now();
+var influxdb_query_uri = 'http://' + location.hostname + ':8086/query?db=microcurrent&q=';
 var chart;
 var dps = [];
 var t_div = 0;
-var t_max = 15.0;
-var min = -0.000007, max = -0.000004;
-
+var t_max = 15000;
+var timestamp = Date.now() - t_max;
+var min = -0.000007,
+	max = -0.000004;
 
 function update(data) {
 	for (var i = 0; i < data.length; i++) {
 		dps.push({
-			x: 0,
-			y: data[i] * 1000000
+			x: Date.parse(data[i][0]),
+			y: data[i][1] * 1000000
 		});
 	}
-	while ((dps.length * t_div) > t_max) {
+	timestamp = Date.parse(data[data.length - 1][0]);
+
+	while ((dps[dps.length - 1].x - dps[0].x) > t_max) {
 		dps.shift();
 	}
-	for (var i = 0; i < dps.length; i++) {
-		dps[i].x = i * t_div;
-	}
+	// for (var i = 0; i < dps.length; i++) {
+	// 	dps[i].x = i * t_div;
+	// }
 	// chart.options.axisY.maximum = max;
 	// chart.options.axisY.minimum = min;
 	chart.render();
 }
 
 function fetch() {
-	$.getJSON('api/data?t=' + timestamp, function(data) {
-		if (data.t === undefined || data.t <= timestamp) {
-			setTimeout(fetch, 500);
+	$.getJSON(influxdb_query_uri + 'SELECT time,I FROM "measurements" WHERE time > ' + (timestamp + '000000')).done(function(data) {
+		if (data.results === undefined || data.results.length < 1 || data.results[0].error !== undefined) {
+			setTimeout(fetch, 300);
 			return;
 		}
-		if (t_div == 0) {
-			t_div = 0.5 / data.data.length;
-		}
-		if (data.data.length > 0) {
-			update(data.data);
-		}
-		timestamp = data.t;
-		fetch();
+		update(data.results[0].series[0].values);
+		setTimeout(fetch, 300);
 	});
 }
 
 $(document).ready(function() {
-	fetch();
-
 	chart = new CanvasJS.Chart("graph", {
 		zoomEnabled: true,
 		exportEnabled: true,
@@ -62,31 +57,5 @@ $(document).ready(function() {
 		}]
 	});
 
-	// var xVal = 0;
-	// var yVal = 100;
-	// var updateInterval = 1000;
-	// var dataLength = 50; // number of dataPoints visible at any point
-
-	// var updateChart = function(count) {
-	// 	count = count || 1;
-	// 	// count is number of times loop runs to generate random dataPoints.
-	// 	for (var j = 0; j < count; j++) {
-	// 		yVal = yVal + Math.round(5 + Math.random() * (-5 - 5));
-	// 		dps.push({
-	// 			x: xVal,
-	// 			y: yVal
-	// 		});
-	// 		xVal++;
-	// 	}
-	// 	if (dps.length > dataLength) {
-	// 		dps.shift();
-	// 	}
-	// 	chart.render();
-	// };
-
-	// updateChart(dataLength);
-	// setInterval(function() {
-	// 	updateChart()
-	// }, updateInterval);
-
+	fetch();
 });
