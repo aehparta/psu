@@ -1,6 +1,6 @@
 
 TARGET = OPI
-USE = LOG SPI GPIO DRIVER_MCP356X
+USE = LOG SPI GPIO DRIVER_MCP356X DISPLAY I2C
 
 # init
 include $(LIBE_PATH)/init.mk
@@ -9,6 +9,7 @@ include $(LIBE_PATH)/init.mk
 BUILD_BINS = microcurrent
 PROGRAM_BIN = microcurrent
 microcurrent_SRC = main.c $(libe_SRC)
+microcurrent_SRC += $(LIBE_PATH)/libe/fonts/fontcmtt30.c $(LIBE_PATH)/libe/fonts/fontcmtt24.c $(LIBE_PATH)/libe/fonts/fontfixed6x8.c
 
 # build
 include $(LIBE_PATH)/build.mk

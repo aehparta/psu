@@ -2,6 +2,8 @@
  * Random testing area for development.
  */
 
+#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -9,6 +11,8 @@
 #include <sys/stat.h>
 #include <sys/file.h>
 #include <unistd.h>
+#include <pthread.h>
+#include <poll.h>
 #include <libe/libe.h>
 
 
@@ -29,57 +33,143 @@
 #define PWM_DUTY_CYCLE              (PWM_PERIOD / 2)
 
 #define PWM_EXPORT_FILE             "/sys/class/pwm/pwmchip0/export"
+#define PWM_UNEXPORT_FILE           "/sys/class/pwm/pwmchip0/unexport"
 #define PWM_PERIOD_FILE             "/sys/class/pwm/pwmchip0/pwm0/period"
 #define PWM_DUTY_CYCLE_FILE         "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"
 #define PWM_ENABLE_FILE             "/sys/class/pwm/pwmchip0/pwm0/enable"
 
+#define I2C_DEVICE                  "/dev/i2c-0"
+#define I2C_FREQUENCY               100000
 
-int pwm_write(const char *file, int n)
+#define IRQ_PIN                     19
+#define IRQ_PIN_VALUE_FILE          "/sys/class/gpio/gpio19/value"
+#define IRQ_PIN_EDGE_FILE           "/sys/class/gpio/gpio19/edge"
+
+
+/* globals */
+struct spi_master master;
+struct spi_device device;
+pthread_t display_thread;
+int irq_pin_fd = -1;
+
+/* written from main and read from display update */
+static volatile float I = 0, Iavg = 0, Ipeak = 0;
+static volatile time_t sampling_started = 0;
+static volatile bool exec = true;
+
+
+int sys_class_write(const char *file, char *str)
 {
-	char str[256];
-	sprintf(str, "%d", n);
 	int fd = open(file, O_WRONLY);
-	ERROR_IF_R(fd < 0, -1, "Failed to open: %s, value to be written: %d, reason: %s", file, n, strerror(errno));
+	ERROR_IF_R(fd < 0, -1, "Failed to open: %s, value to be written: %s, reason: %s", file, str, strerror(errno));
 	write(fd, str, strlen(str));
 	close(fd);
 	return 0;
 }
 
+int sys_class_write_int(const char *file, int n)
+{
+	char str[256];
+	snprintf(str, sizeof(str), "%d", n);
+	return sys_class_write(file, str);
+}
+
+/* pwm initialization */
 int pwm_init(void)
 {
 	struct stat st;
 
+	/* check that pwm is available */
 	ERROR_IF_R(stat(PWM_EXPORT_FILE, &st), -1, "PWM not found, tried to stat(): %s", PWM_EXPORT_FILE);
+
+	/* check if pwm is already exported and disable just in case if it is */
 	if (stat(PWM_ENABLE_FILE, &st)) {
-		IF_R(pwm_write(PWM_EXPORT_FILE, 0), -1);
+		IF_R(sys_class_write_int(PWM_EXPORT_FILE, 0), -1);
 	} else {
-		IF_R(pwm_write(PWM_ENABLE_FILE, 0), -1);
+		IF_R(sys_class_write_int(PWM_ENABLE_FILE, 0), -1);
 	}
 
 	/* duty cycle to zero first */
-	IF_R(pwm_write(PWM_DUTY_CYCLE_FILE, 0), -1);
+	IF_R(sys_class_write_int(PWM_DUTY_CYCLE_FILE, 0), -1);
 
 	/* set period and then duty cycle, then enable */
-	IF_R(pwm_write(PWM_PERIOD_FILE, PWM_PERIOD), -1);
-	IF_R(pwm_write(PWM_DUTY_CYCLE_FILE, PWM_DUTY_CYCLE), -1);
-	IF_R(pwm_write(PWM_ENABLE_FILE, 1), -1);
+	IF_R(sys_class_write_int(PWM_PERIOD_FILE, PWM_PERIOD), -1);
+	IF_R(sys_class_write_int(PWM_DUTY_CYCLE_FILE, PWM_DUTY_CYCLE), -1);
+	IF_R(sys_class_write_int(PWM_ENABLE_FILE, 1), -1);
 
 	return 0;
 }
 
-int main(void)
+/* pwm shutdown */
+void pwm_quit(void)
 {
-	struct spi_master master;
-	struct spi_device device;
+	sys_class_write_int(PWM_ENABLE_FILE, 0);
+	sys_class_write_int(PWM_UNEXPORT_FILE, 0);
+}
 
+/* display update is threaded since it is low priority */
+void *display_thread_func(void *p)
+{
+	struct display display;
+	uint8_t buffer[SSD1306_BUFFER_SIZE];
+	struct i2c_master i2c;
+	char str[32];
+
+	/* open and initialize display, exit this thread with a warning if this fails */
+	WARN_IF_R(i2c_master_open(&i2c, I2C_DEVICE, I2C_FREQUENCY, 0, 0), NULL, "unable to open i2c device");
+	WARN_IF_R(ssd1306_i2c_open(&display, &i2c, 0, 0, 0), NULL, "unable to open ssd1306 display");
+	optctl(&display, DISPLAY_OPT_SET_BUFFER, buffer);
+
+	/* start filling display with values */
+	while (exec) {
+		draw_fill(&display, 0, 0, 128, 64, 0x000000);
+
+		/* full scale in uA */
+		snprintf(str, sizeof(str), "%8.1fuA", I * 1000000.0);
+		draw_string(&display, &g_sFontCmtt24, str, -1, 8, 0, true);
+
+		/* mA/uA scale depending on value */
+		if (I > 0.000999) {
+			snprintf(str, sizeof(str), "%6.2f", I * 1000.0);
+		} else {
+			snprintf(str, sizeof(str), "%6.1f", I * 1000000.0);
+		}
+		draw_string(&display, &g_sFontCmtt30, str, -1, 2, 20, true);
+		draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
+
+		/* average and peak */
+		draw_string(&display, &g_sFontFixed6x8, "Iavg 999uA Ipeak 10.0mA", -1, 0, 48, true);
+
+		/* sampling time */
+		time_t st = time(NULL) - sampling_started;
+		snprintf(str, sizeof(str), "%02lu:%02lu:%02lu", st / 3600, (st / 60) % 60, st % 60);
+		draw_string(&display, &g_sFontFixed6x8, str, -1, 0, 56, true);
+
+		/* not really a need to update display very often */
+		os_sleepf(0.3);
+	}
+
+	display_close(&display);
+	i2c_master_close(&i2c);
+	return NULL;
+}
+
+int p_init(char argc, char *argv[])
+{
 	os_init();
 	log_init();
 
 	/* setup pwm */
 	IF_R(pwm_init(), 1);
 
+	/* display */
+	pthread_create(&display_thread, NULL, display_thread_func, NULL);
+
 	/* irq gpio */
-	gpio_input(19);
+	gpio_input(IRQ_PIN);
+	sys_class_write(IRQ_PIN_EDGE_FILE, "rising");
+	irq_pin_fd = open(IRQ_PIN_VALUE_FILE, O_RDONLY | O_NONBLOCK);
+	ERROR_IF_R(irq_pin_fd < 0, -1, "failed to open interrupt pin value file: %s", IRQ_PIN_VALUE_FILE);
 
 	/* open ft232h type device and try to see if it has a nrf24l01+ connected to it through mpsse-spi */
 	ERROR_IF_R(spi_master_open(
@@ -110,14 +200,47 @@ int main(void)
 	/* wait for the device to settle */
 	os_sleepf(0.1);
 
-	/* read variables */
+	return 0;
+}
+
+void p_exit(int code)
+{
+	exec = false;
+	pthread_join(display_thread, NULL);
+	mcp356x_close(&device);
+	spi_master_close(&master);
+	pwm_quit();
+	log_quit();
+	os_quit();
+	if (irq_pin_fd >= 0) {
+		close(irq_pin_fd);
+	}
+	exit(code);
+}
+
+int main(int argc, char *argv[])
+{
+	struct pollfd fdset[1];
+
+	/* init */
+	if (p_init(argc, argv)) {
+		CRIT_MSG("initialization failed");
+		p_exit(EXIT_FAILURE);
+	}
+
+	/* signal handlers */
+	signal(SIGINT, p_exit);
+	signal(SIGTERM, p_exit);
+
+	/* variables for reading */
 	double sum = 0;
 	int count = 0;
 	os_time_t t = os_timef() + INTERVAL;
 	float samples[SAMPLE_COUNT];
 	int sample_c = 0;
 
-	/* start application loop */
+	/* start main application loop */
+	sampling_started = time(NULL);
 	while (1) {
 		/* wait for sample to be ready and read */
 		while (gpio_read(19));
@@ -136,13 +259,14 @@ int main(void)
 			struct timespec tp;
 			char fs[256];
 			clock_gettime(CLOCK_REALTIME, &tp);
-			sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
+			snprintf(fs, sizeof(fs), "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
 			int fd = open(fs, O_CREAT | O_WRONLY, 0644);
 			write(fd, samples, sizeof(float) * sample_c);
 			close(fd);
 
 			/* calculate average */
 			sum /= count;
+			I = (float)sum;
 			printf("%+12.1f uA, samples: %d\n", sum * 1000000.0, count);
 
 			/* reset all */
@@ -191,9 +315,6 @@ int main(void)
 		// }
 	}
 
-	/* free */
-	spi_master_close(&master);
-	log_quit();
-	os_quit();
+	p_exit(EXIT_SUCCESS);
 	return 0;
 }
