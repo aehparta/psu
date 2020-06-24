@@ -18,15 +18,15 @@
 #define VREF                        3.3L
 #define OFFSET                      885.0L
 #else
-#define VREF                        (2.555L / 3.298L)
-#define OFFSET                      60.0L
+#define MULTIPLIER                  (1.0785L / 16.0)
+#define OFFSET                      1350.0L
 #endif
 
 #define INTERVAL                    0.5
-#define SAMPLE_COUNT                1
+#define SAMPLE_COUNT                100000
 
-#define PWM_PERIOD                  "100"
-#define PWM_DUTY_CYCLE              "50"
+#define PWM_PERIOD                  200
+#define PWM_DUTY_CYCLE              (PWM_PERIOD / 2)
 
 #define PWM_EXPORT_FILE             "/sys/class/pwm/pwmchip0/export"
 #define PWM_PERIOD_FILE             "/sys/class/pwm/pwmchip0/pwm0/period"
@@ -34,10 +34,12 @@
 #define PWM_ENABLE_FILE             "/sys/class/pwm/pwmchip0/pwm0/enable"
 
 
-int pwm_write(const char *file, const char *str)
+int pwm_write(const char *file, int n)
 {
+	char str[256];
+	sprintf(str, "%d", n);
 	int fd = open(file, O_WRONLY);
-	ERROR_IF_R(fd < 0, -1, "Failed to open: %s, data to be written: %s, reason: %s", file, str, strerror(errno));
+	ERROR_IF_R(fd < 0, -1, "Failed to open: %s, value to be written: %d, reason: %s", file, n, strerror(errno));
 	write(fd, str, strlen(str));
 	close(fd);
 	return 0;
@@ -49,18 +51,18 @@ int pwm_init(void)
 
 	ERROR_IF_R(stat(PWM_EXPORT_FILE, &st), -1, "PWM not found, tried to stat(): %s", PWM_EXPORT_FILE);
 	if (stat(PWM_ENABLE_FILE, &st)) {
-		IF_R(pwm_write(PWM_EXPORT_FILE, "0"), -1);
+		IF_R(pwm_write(PWM_EXPORT_FILE, 0), -1);
 	} else {
-		IF_R(pwm_write(PWM_ENABLE_FILE, "0"), -1);
+		IF_R(pwm_write(PWM_ENABLE_FILE, 0), -1);
 	}
 
 	/* duty cycle to zero first */
-	IF_R(pwm_write(PWM_DUTY_CYCLE_FILE, "0"), -1);
+	IF_R(pwm_write(PWM_DUTY_CYCLE_FILE, 0), -1);
 
 	/* set period and then duty cycle, then enable */
 	IF_R(pwm_write(PWM_PERIOD_FILE, PWM_PERIOD), -1);
 	IF_R(pwm_write(PWM_DUTY_CYCLE_FILE, PWM_DUTY_CYCLE), -1);
-	IF_R(pwm_write(PWM_ENABLE_FILE, "1"), -1);
+	IF_R(pwm_write(PWM_ENABLE_FILE, 1), -1);
 
 	return 0;
 }
@@ -95,68 +97,81 @@ int main(void)
 	os_sleepf(0.1);
 
 	/* configure */
-	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0);
-	// optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0);
-	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3);
-	optwr_u8(&device, MCP356X_OPT_PRE, 0x3);
-
-	/* OSR */
-	// optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_16384);
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_256);
-
-	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3);
-	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16);
-	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3);
-	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1);
+	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0); /* external clock */
+	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3); /* continuous conversion */
+	optwr_u8(&device, MCP356X_OPT_PRE, 0x0); /* no pre-scaling */
+	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_4096); /* 4096 OSR */
+	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
+	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
+	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
+	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3); /* continous conversion */
+	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1); /* interrupt only on sample ready */
 
 	/* wait for the device to settle */
 	os_sleepf(0.1);
 
-	/* first read few rounds and wait a bit */
-	mcp356x_ch(&device, MCP356X_CH_01);
-	for (int i = 0; i < 10; i++) {
-		while (gpio_read(19));
-		mcp356x_rd(&device);
-	}
-	os_sleepf(1.0);
-
-	/* read */
+	/* read variables */
 	double sum = 0;
 	int count = 0;
 	os_time_t t = os_timef() + INTERVAL;
 	float samples[SAMPLE_COUNT];
 	int sample_c = 0;
 
-	// int cap_fd = -1;
-	// os_time_t cap_t = os_timef() + 0.5;
-
+	/* start application loop */
 	while (1) {
+		/* wait for sample to be ready and read */
 		while (gpio_read(19));
-
 		int32_t x = mcp356x_rd(&device) / 256.0L + OFFSET;
-		sum += ((double)x / (double)0x7fffff * VREF / 16.0L);
+
+		/* average calculation */
+		sum += ((double)x / (double)0x7fffff * MULTIPLIER);
 		count++;
 
+		/* samples to send to web interface */
+		samples[sample_c++] = (float)((double)x / (double)0x7fffff * MULTIPLIER);
+
+		/* send/show on interval */
 		if (t < os_timef()) {
+			/* write samples to file for web interface to read */
+			struct timespec tp;
+			char fs[256];
+			clock_gettime(CLOCK_REALTIME, &tp);
+			sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
+			int fd = open(fs, O_CREAT | O_WRONLY, 0644);
+			write(fd, samples, sizeof(float) * sample_c);
+			close(fd);
+
+			/* calculate average */
 			sum /= count;
-			samples[sample_c++] = sum;
-			if (sample_c >= SAMPLE_COUNT) {
-				struct timespec tp;
-				char fs[256];
-				clock_gettime(CLOCK_REALTIME, &tp);
-				sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
-				int fd = open(fs, O_CREAT | O_WRONLY, 0644);
-				write(fd, samples, sizeof(samples));
-				close(fd);
-				sample_c = 0;
-			}
+			printf("%+12.1f uA, samples: %d\n", sum * 1000000.0, count);
 
-			printf("%+12.1f uA\n", sum * 1000000.0);
-
+			/* reset all */
+			sample_c = 0;
 			sum = 0.0;
 			count = 0;
 			t += INTERVAL;
 		}
+
+		// if (t < os_timef()) {
+		// 	sum /= count;
+		// 	samples[sample_c++] = sum;
+		// 	if (sample_c >= SAMPLE_COUNT) {
+		// 		struct timespec tp;
+		// 		char fs[256];
+		// 		clock_gettime(CLOCK_REALTIME, &tp);
+		// 		sprintf(fs, "%012lu%03lu.capture", tp.tv_sec, tp.tv_nsec / 1000000);
+		// 		int fd = open(fs, O_CREAT | O_WRONLY, 0644);
+		// 		write(fd, samples, sizeof(samples));
+		// 		close(fd);
+		// 		sample_c = 0;
+		// 	}
+
+		// 	printf("%+12.1f uA\n", sum * 1000000.0);
+
+		// 	sum = 0.0;
+		// 	count = 0;
+		// 	t += INTERVAL;
+		// }
 
 
 		// if (cap_fd < 0) {

@@ -3,14 +3,14 @@ var chart;
 var dps = [];
 var t_div = 0;
 var t_max = 15.0;
-var min = -0.000001, max = 0.00001;
+var min = -0.000007, max = -0.000004;
 
 
 function update(data) {
 	for (var i = 0; i < data.length; i++) {
 		dps.push({
 			x: 0,
-			y: data[i]
+			y: data[i] * 1000000
 		});
 	}
 	while ((dps.length * t_div) > t_max) {
@@ -19,8 +19,8 @@ function update(data) {
 	for (var i = 0; i < dps.length; i++) {
 		dps[i].x = i * t_div;
 	}
-	chart.options.axisY.maximum = max;
-	chart.options.axisY.minimum = min;
+	// chart.options.axisY.maximum = max;
+	// chart.options.axisY.minimum = min;
 	chart.render();
 }
 
