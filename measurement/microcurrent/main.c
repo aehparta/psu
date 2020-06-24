@@ -1,5 +1,5 @@
 /*
- * Random testing area for development.
+ * Microcurrent software for Orange Pi Zero.
  */
 
 #include <string.h>
