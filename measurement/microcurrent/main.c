@@ -1,5 +1,8 @@
 /*
  * Microcurrent software for Orange Pi Zero.
+ *
+ * Authors:
+ *  Antti Partanen <aehparta@iki.fi>
  */
 
 #include <stdint.h>
@@ -16,6 +19,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <libe/libe.h>
+#include "httpd.h"
 
 
 #define MULTIPLIER                  (1.0785L / 16.0)
@@ -40,6 +44,10 @@
 
 #define INFLUXDB_IP                 "127.0.0.1"
 #define INFLUXDB_UDP_PORT           8089
+
+#define HTTPD_BIND_ADDR             "0.0.0.0"
+#define HTTPD_PORT                  80
+#define HTTPD_ROOT                  "./web"
 
 
 /* globals */
@@ -204,11 +212,16 @@ int p_init(char argc, char *argv[])
 	/* wait for the device to settle */
 	os_sleepf(0.1);
 
+	/* start web server */
+	ERROR_IF_R(httpd_init(), -1, "unable to initialize http daemon");
+	ERROR_IF_R(httpd_start(HTTPD_BIND_ADDR, HTTPD_PORT, HTTPD_ROOT), -1, "unable to start http daemon");
+
 	return 0;
 }
 
 void p_exit(int code)
 {
+	httpd_quit();
 	exec = false;
 	pthread_join(display_thread, NULL);
 	mcp356x_close(&device);
