@@ -127,7 +127,6 @@ void *display_thread_func(void *p)
 	optctl(&display, DISPLAY_OPT_SET_BUFFER, buffer);
 
 	/* start filling display with values */
-	DEBUG_MSG("lcd display update thread started");
 	while (exec) {
 		draw_fill(&display, 0, 0, 128, 64, 0x000000);
 
@@ -138,11 +137,12 @@ void *display_thread_func(void *p)
 		/* mA/uA scale depending on value */
 		if (I > 0.000999) {
 			snprintf(str, sizeof(str), "%6.2f", I * 1000.0);
+		draw_string(&display, &g_sFontCmtt24, "mA", -1, 104, 20, true);
 		} else {
 			snprintf(str, sizeof(str), "%6.1f", I * 1000000.0);
+		draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
 		}
 		draw_string(&display, &g_sFontCmtt30, str, -1, 2, 20, true);
-		draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
 
 		/* average and peak */
 		draw_string(&display, &g_sFontFixed6x8, "Iavg 9uA Ipeak 1.0mA", -1, 0, 48, true);
@@ -153,10 +153,10 @@ void *display_thread_func(void *p)
 		draw_string(&display, &g_sFontFixed6x8, str, -1, 0, 56, true);
 
 		/* not really a need to update display very often */
+		display_update(&display);
 		os_sleepf(0.3);
 	}
 
-	DEBUG_MSG("lcd display thread exiting");
 	display_close(&display);
 	i2c_master_close(&i2c);
 	return NULL;
