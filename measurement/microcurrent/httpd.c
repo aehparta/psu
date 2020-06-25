@@ -94,7 +94,7 @@ static int httpd_request_handler(void *cls, struct MHD_Connection *connection,
 
 int httpd_init(void)
 {
-	/* just copied this template from another project, init not really needed here, but for I simply can't remove it, might need it later?!?!? */
+	/* just copied this code from another project, init not really needed here, but for reasons unknown I simply cannot remove it, might need it later?!?!? */
 	return 0;
 }
 

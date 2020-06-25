@@ -23,12 +23,14 @@
 #include "opt.h"
 
 
+/* calibration variables */
 #define MULTIPLIER                  (1.0785L / 16.0)
 #define OFFSET                      1350.0L
 
+/* print info to display/console this often, seconds */
 #define INTERVAL                    0.5
-#define SAMPLE_COUNT                100000
 
+/* PWM is used to generate clock for MCP3561 */
 #define PWM_PERIOD                  200
 #define PWM_DUTY_CYCLE              (PWM_PERIOD / 2)
 
@@ -38,10 +40,12 @@
 #define PWM_DUTY_CYCLE_FILE         "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"
 #define PWM_ENABLE_FILE             "/sys/class/pwm/pwmchip0/pwm0/enable"
 
+/* interrupt pin for MCP3561 sample ready */
+#define IRQ_PIN                     19
+
+/* I2C is for display */
 #define I2C_DEVICE                  "/dev/i2c-0"
 #define I2C_FREQUENCY               100000
-
-#define IRQ_PIN                     19
 
 
 /* command line options */

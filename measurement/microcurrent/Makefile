@@ -15,7 +15,13 @@ LDFLAGS += -lmicrohttpd
 # build
 include $(LIBE_PATH)/build.mk
 
-# programmable targets
-include $(LIBE_PATH)/flash/program.mk
-
--include local.mk
+# install
+INSTALL_BASE_DIR = /opt/microcurrent
+install: all
+	sudo mkdir -p $(INSTALL_BASE_DIR)/bin/
+	sudo mkdir -p $(INSTALL_BASE_DIR)/html/
+	sudo cp $(PROGRAM_BIN)$(TARGET_EXT)$(BIN_EXT) $(INSTALL_BASE_DIR)/bin/microcurrent
+	sudo cp -r ./web/* $(INSTALL_BASE_DIR)/html/
+	sudo cp microcurrent.service /lib/systemd/system/microcurrent.service
+	sudo systemctl enable microcurrent
+	sudo service microcurrent start

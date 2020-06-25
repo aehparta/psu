@@ -1,0 +1,10 @@
+[Unit] 
+Description=Microcurrent daemon
+
+[Service] 
+Restart=on-failure
+ExecStart=/opt/microcurrent/bin/microcurrent --html /opt/microcurrent/html
+KillSignal=SIGINT 
+
+[Install] 
+WantedBy=multi-user.target
