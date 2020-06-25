@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <libe/libe.h>
 #include "httpd.h"
+#include "opt.h"
 
 
 #define MULTIPLIER                  (1.0785L / 16.0)
@@ -42,13 +43,27 @@
 
 #define IRQ_PIN                     19
 
-#define INFLUXDB_IP                 "127.0.0.1"
-#define INFLUXDB_UDP_PORT           8089
 
-#define HTTPD_BIND_ADDR             "0.0.0.0"
-#define HTTPD_PORT                  80
-#define HTTPD_ROOT                  "./web"
+/* command line options */
+struct opt_option opt_all[] = {
+	{ 'h', "help", no_argument, 0, NULL, NULL, "display this help and exit", { 0 } },
 
+	/* influxdb server */
+	{
+		'i', "influxdb-ip", required_argument, 0, "127.0.0.1", NULL,
+		"remote InfluxDB server host IP address\n"
+		"(hostname not accepted, I was too lazy to implement resolve here)\n"
+		"this is for sending data through UDP, see InfluxDB UDP support for more"
+		, { OPT_FILTER_INT, 1, 65535 }
+	},
+	{ 'p', "influxdb-port", required_argument, 0, "8089", NULL, "remote InfluxDB UDP receive port", { OPT_FILTER_INT, 1, 65535 } },
+
+	/* http server */
+	{ 'P', "http-port", required_argument, 0, "80", NULL, "internal http daemon port", { OPT_FILTER_INT, 1, 65535 } },
+	{ 'D', "html", required_argument, 0, "./web", NULL, "internal http daemon public html directory", { 0 } },
+
+	{ 0, 0, 0, 0, 0, 0, 0, { 0 } }
+};
 
 /* globals */
 struct spi_master master;
@@ -57,13 +72,13 @@ pthread_t display_thread;
 int influxdb_udp_socket = -1;
 struct sockaddr_in influxdb_addr;
 
-
 /* written from main and read from display update */
 static volatile float I = 0, Iavg = 0, Ipeak = 0;
 static volatile time_t sampling_started = 0;
 static volatile bool exec = true;
 
 
+/* helper to write /sys/class/.. */
 int sys_class_write(const char *file, char *str)
 {
 	int fd = open(file, O_WRONLY);
@@ -73,6 +88,7 @@ int sys_class_write(const char *file, char *str)
 	return 0;
 }
 
+/* helper to write /sys/class/.. */
 int sys_class_write_int(const char *file, int n)
 {
 	char str[256];
@@ -137,10 +153,10 @@ void *display_thread_func(void *p)
 		/* mA/uA scale depending on value */
 		if (I > 0.000999) {
 			snprintf(str, sizeof(str), "%6.2f", I * 1000.0);
-		draw_string(&display, &g_sFontCmtt24, "mA", -1, 104, 20, true);
+			draw_string(&display, &g_sFontCmtt24, "mA", -1, 104, 20, true);
 		} else {
 			snprintf(str, sizeof(str), "%6.1f", I * 1000000.0);
-		draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
+			draw_string(&display, &g_sFontCmtt24, "uA", -1, 104, 20, true);
 		}
 		draw_string(&display, &g_sFontCmtt30, str, -1, 2, 20, true);
 
@@ -162,6 +178,7 @@ void *display_thread_func(void *p)
 	return NULL;
 }
 
+/* basic initializations */
 int p_init(char argc, char *argv[])
 {
 	os_init();
@@ -180,8 +197,8 @@ int p_init(char argc, char *argv[])
 	influxdb_udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
 	ERROR_IF_R(influxdb_udp_socket < 0, -1, "failed to create influxdb udp socket");
 	influxdb_addr.sin_family = AF_INET;
-	influxdb_addr.sin_addr.s_addr = inet_addr(INFLUXDB_IP);
-	influxdb_addr.sin_port = htons(INFLUXDB_UDP_PORT);
+	influxdb_addr.sin_addr.s_addr = inet_addr(opt_get('i'));
+	influxdb_addr.sin_port = htons(opt_get_int('p'));
 
 	/* open ft232h type device and try to see if it has a nrf24l01+ connected to it through mpsse-spi */
 	ERROR_IF_R(spi_master_open(
@@ -214,11 +231,12 @@ int p_init(char argc, char *argv[])
 
 	/* start web server */
 	ERROR_IF_R(httpd_init(), -1, "unable to initialize http daemon");
-	ERROR_IF_R(httpd_start(HTTPD_BIND_ADDR, HTTPD_PORT, HTTPD_ROOT), -1, "unable to start http daemon");
+	ERROR_IF_R(httpd_start("0.0.0.0", opt_get_int('P'), opt_get('D')), -1, "unable to start http daemon");
 
 	return 0;
 }
 
+/* free resources */
 void p_exit(int code)
 {
 	httpd_quit();
@@ -232,8 +250,12 @@ void p_exit(int code)
 	exit(code);
 }
 
+/* welp, u should know what this is */
 int main(int argc, char *argv[])
 {
+	/* parse options */
+	IF_R(opt_init(opt_all, NULL, NULL, NULL) || opt_parse(argc, argv), EXIT_FAILURE);
+
 	/* init */
 	if (p_init(argc, argv)) {
 		CRIT_MSG("initialization failed");
