@@ -6,7 +6,7 @@ var canvas = {
 		/* pixels */
 		end: 0,
 		/* index in steps */
-		step: 0,
+		step: -1,
 		/* seconds each */
 		steps: [
 			3600, 1800, 600, 300, 120, 60, 30, 10, 5, 2.5, 1, 0.5, 0.25, 0.1, 0.05, 0.025, 0.01
@@ -16,7 +16,7 @@ var canvas = {
 		/* pixels */
 		middle: 0,
 		/* index in steps */
-		step: 0,
+		step: -1,
 		/* amps each */
 		steps: [
 			1, 0.5, 0.25,
@@ -40,35 +40,33 @@ var canvas = {
 		this.el = element;
 		this.ctx = this.el.getContext('2d');
 
-		/* multiply canvas size by ten to achieve prettier lines
-		 * javascript canvas thing, dunno more about this one
-		 * tl;dr: without this everything is very fuzzy because of antialiasing etc
-		 */
-		var w = this.el.width;
-		var h = this.el.height;
-		this.el.width = w * 10;
-		this.el.height = h * 10;
-		this.el.style.width = w;
-		this.el.style.height = h;
+		/* resize */
+		this.resize();
 
 		/* default x-axis end and y-axis middle coordinate */
 		this.x.end = this.pixels_per_step;
 		this.y.middle = this.el.height / 2;
 
-		/* find one second step from all the steps and set it as default */
+		/* fill x selector and find one second step from all the steps and set it as default */
 		for (var i = 0; i < this.x.steps.length; i++) {
 			if (this.x.steps[i] == 1) {
 				this.x.step = i;
-				break;
 			}
+
+			var option = '<option ' + (this.x.step == i ? 'selected' : '') + ' value="' + this.x.steps[i] + '">' + util.secondsToHuman(this.x.steps[i]) + '</option>';
+			document.getElementById('step-x').insertAdjacentHTML('beforeend', option);
 		}
 
-		/* find ten microamp step from all the steps and set it as default */
+		/* fill y selector and find ten microamp step from all the steps and set it as default */
 		for (var i = 0; i < this.y.steps.length; i++) {
 			if (this.y.steps[i] == 0.00001) {
 				this.y.step = i;
-				break;
 			}
+
+			var v = util.human(this.y.steps[i], this.y.steps[i]);
+			var u = util.divider(this.y.steps[i]).u;
+			var option = '<option ' + (this.y.step == i ? 'selected' : '') + ' value="' + this.y.steps[i] + '">' + v + u + 'A</option>';
+			document.getElementById('step-y').insertAdjacentHTML('beforeend', option);
 		}
 
 		/* event bindings */
@@ -77,13 +75,25 @@ var canvas = {
 		this.el.onwheel = this.zoom;
 	},
 
+	resize: function() {
+		/* calculate canvas size here dynamically */
+		this.el.style.top = document.getElementById('toolbar').clientHeight + 'px';
+		this.el.width = window.innerWidth;
+		this.el.height = window.innerHeight - document.getElementById('toolbar').clientHeight;
+	},
+
 	update: function(data) {
+		/* somewhere under the data */
 		if (data === undefined) {
 			data = this.data;
 		} else {
 			this.data = data;
 		}
 
+		/* do resizing every refresh, should not do anything heavy if window has not been resized */
+		this.resize();
+
+		/* clear draw area */
 		this.ctx.clearRect(0, 0, this.el.width, this.el.height);
 		this.ctx.save();
 
@@ -128,13 +138,7 @@ var canvas = {
 			this.ctx.lineTo(i, this.el.height);
 			this.ctx.stroke();
 
-			var vs = Number(Number(v).toFixed(3)) + 's';
-			if (this.x.steps[this.x.step] >= 3600) {
-				vs = Number(v / 3600).toFixed(0) + 'h';
-			} else if (this.x.steps[this.x.step] >= 60) {
-				vs = Number(v / 60).toFixed(0) + 'm';
-			}
-			this.ctx.fillText(vs, i + 10, 30);
+			this.ctx.fillText(util.secondsToHuman(v, 0.001), i + 10, 30);
 		}
 
 		/* data */
