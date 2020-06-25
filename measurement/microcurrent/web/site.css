@@ -22,7 +22,7 @@
 
 #toolbar select {
   width: 150px;
-  font-size: 22pt;
+  font-size: 24pt;
   background: #005050;
   border: 0px;
   text-align-last: right;
@@ -35,8 +35,9 @@
 #toolbar button {
   float: right;
   border: 0px;
-  font-size: 12pt;
+  font-size: 24pt;
+  font-weight: 900;
   width: 40px;
-  height: 40px;
   vertical-align: center;
+  background: #009090;
 }

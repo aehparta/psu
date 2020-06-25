@@ -53,7 +53,7 @@ var canvas = {
 				this.x.step = i;
 			}
 
-			var option = '<option ' + (this.x.step == i ? 'selected' : '') + ' value="' + this.x.steps[i] + '">' + util.secondsToHuman(this.x.steps[i]) + '</option>';
+			var option = '<option ' + (this.x.step == i ? 'selected' : '') + ' value="' + i + '">' + util.secondsToHuman(this.x.steps[i]) + '</option>';
 			document.getElementById('step-x').insertAdjacentHTML('beforeend', option);
 		}
 
@@ -63,16 +63,18 @@ var canvas = {
 				this.y.step = i;
 			}
 
-			var v = util.human(this.y.steps[i], this.y.steps[i]);
-			var u = util.divider(this.y.steps[i]).u;
-			var option = '<option ' + (this.y.step == i ? 'selected' : '') + ' value="' + this.y.steps[i] + '">' + v + u + 'A</option>';
+			var v = util.human(this.y.steps[i], 1);
+			var u = util.prefix(this.y.steps[i]);
+			var option = '<option ' + (this.y.step == i ? 'selected' : '') + ' value="' + i + '">' + v + u + 'A</option>';
 			document.getElementById('step-y').insertAdjacentHTML('beforeend', option);
 		}
 
 		/* event bindings */
 		this.el.onmousedown = this.dragStart;
 		this.el.onmousemove = this.dragMove;
-		this.el.onwheel = this.zoom;
+		this.el.onwheel = this.zoomMouse;
+		document.getElementById('step-x').onchange = this.zoomSelectX;
+		document.getElementById('step-y').onchange = this.zoomSelectY;
 	},
 
 	resize: function() {
@@ -115,16 +117,14 @@ var canvas = {
 			this.ctx.lineTo(this.el.width, i);
 			this.ctx.stroke();
 
-			var vs = this.y.steps[this.y.step] < 0.001 ? '-' + Number(v * 1000000).toFixed(0) + ' µA' : '-' + Number(v * 1000).toFixed(0) + ' mA';
-			this.ctx.fillText(vs, 10, i - 10);
+			this.ctx.fillText('-' + util.human(v, 1) + util.prefix(v) + 'A', 10, i - 10);
 		}
 		for (var i = this.y.middle - this.pixels_per_step, v = this.y.steps[this.y.step]; i >= 0; i -= this.pixels_per_step, v += this.y.steps[this.y.step]) {
 			this.ctx.moveTo(0, i);
 			this.ctx.lineTo(this.el.width, i);
 			this.ctx.stroke();
 
-			var vs = this.y.steps[this.y.step] < 0.001 ? '+' + Number(v * 1000000).toFixed(0) + ' µA' : '+' + Number(v * 1000).toFixed(0) + ' mA';
-			this.ctx.fillText(vs, 10, i + 30);
+			this.ctx.fillText('+' + util.human(v, 1) + util.prefix(v) + 'A', 10, i + 30);
 		}
 
 		/* x grid */
@@ -138,7 +138,7 @@ var canvas = {
 			this.ctx.lineTo(i, this.el.height);
 			this.ctx.stroke();
 
-			this.ctx.fillText(util.secondsToHuman(v, 0.001), i + 10, 30);
+			this.ctx.fillText(util.secondsToHuman(v), i + 10, 30);
 		}
 
 		/* data */
@@ -181,21 +181,38 @@ var canvas = {
 		canvas.update();
 	},
 
-	zoom: function(e) {
-		e.preventDefault();
-		if (e.ctrlKey) {
-			if (e.deltaY > 0) {
+	zoom: function(axis, dir) {
+		if (axis == 'y') {
+			if (dir == 'out') {
 				canvas.y.step = canvas.y.step > 0 ? canvas.y.step - 1 : canvas.y.step;
-			} else {
+			} else if (dir == 'in') {
 				canvas.y.step = (canvas.y.step + 1) < canvas.y.steps.length ? canvas.y.step + 1 : canvas.y.step;
 			}
-		} else {
-			if (e.deltaY > 0) {
+		} else if (axis == 'x') {
+			if (dir == 'out') {
 				canvas.x.step = canvas.x.step > 0 ? canvas.x.step - 1 : canvas.x.step;
-			} else {
+			} else if (dir == 'in') {
 				canvas.x.step = (canvas.x.step + 1) < canvas.x.steps.length ? canvas.x.step + 1 : canvas.x.step;
 			}
 		}
 		canvas.update();
 	},
+
+	zoomMouse: function(e) {
+		e.preventDefault();
+		canvas.zoom(e.ctrlKey ? 'y' : 'x', e.deltaY > 0 ? 'out' : 'in');
+		document.getElementById('step-x').value = canvas.x.step;
+		document.getElementById('step-y').value = canvas.y.step;
+	},
+
+	zoomSelectX: function(e) {
+		canvas.x.step = this.value;
+		canvas.update();
+	},
+
+	zoomSelectY: function(e) {
+		canvas.y.step = this.value;
+		canvas.update();
+	}
+
 };

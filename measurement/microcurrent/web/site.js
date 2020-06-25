@@ -1,10 +1,11 @@
 var influxdb_query_uri = 'http://' + location.hostname + ':8086/query?db=microcurrent&q=';
 var dps = [];
 var t_div = 0;
-var t_max = 10;
+var t_max = 60;
 var timestamp = Date.now() - (t_max * 1000);
 var min = -0.000007,
 	max = -0.000004;
+var paused = false;
 
 function update(data) {
 	for (var i = 0; i < data.length; i++) {
@@ -22,6 +23,10 @@ function update(data) {
 }
 
 function fetch() {
+	if (paused) {
+		setTimeout(fetch, 100);
+		return;
+	}
 	$.getJSON(influxdb_query_uri + 'SELECT time,I FROM "measurements" WHERE time > ' + (timestamp + '000000')).done(function(data) {
 		if (data.results === undefined || data.results.length < 1 || data.results[0].error !== undefined) {
 			setTimeout(fetch, 300);
@@ -34,6 +39,14 @@ function fetch() {
 
 $(document).ready(function() {
 	canvas.init(document.getElementById('canvas'));
-	// canvas.test();
 	fetch();
+
+	document.getElementById('pause').onclick = function() {
+		paused = !paused;
+		if (paused) {
+			this.innerHTML = '>';
+		} else {
+			this.innerHTML = '| |';
+		}
+	};
 });
