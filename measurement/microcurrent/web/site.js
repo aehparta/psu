@@ -1,16 +1,15 @@
 var influxdb_query_uri = 'http://' + location.hostname + ':8086/query?db=microcurrent&q=';
-var chart;
 var dps = [];
 var t_div = 0;
-var t_max = 15000;
-var timestamp = Date.now() - t_max;
+var t_max = 600;
+var timestamp = Date.now() - (t_max * 1000);
 var min = -0.000007,
 	max = -0.000004;
 
 function update(data) {
 	for (var i = 0; i < data.length; i++) {
 		dps.push({
-			x: Date.parse(data[i][0]),
+			x: Date.parse(data[i][0]) / 1000,
 			y: data[i][1]
 		});
 	}
@@ -19,12 +18,6 @@ function update(data) {
 	while ((dps[dps.length - 1].x - dps[0].x) > t_max) {
 		dps.shift();
 	}
-	// for (var i = 0; i < dps.length; i++) {
-	// 	dps[i].x = i * t_div;
-	// }
-	// chart.options.axisY.maximum = max;
-	// chart.options.axisY.minimum = min;
-	// chart.render();
 	canvas.update(dps);
 }
 
@@ -40,27 +33,7 @@ function fetch() {
 }
 
 $(document).ready(function() {
-	chart = new CanvasJS.Chart("graph", {
-		zoomEnabled: true,
-		exportEnabled: true,
-		title: {
-			text: "Current"
-		},
-		axisY: {
-			includeZero: false,
-			// maximum: 0.00001,
-			// minimum: -0.00001,
-		},
-		data: [{
-			type: "spline",
-			markerSize: 0,
-			dataPoints: dps
-		}]
-	});
-
 	canvas.init(document.getElementById('canvas'));
-	
 	// canvas.test();
-
 	fetch();
 });
