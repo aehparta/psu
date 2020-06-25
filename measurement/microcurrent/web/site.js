@@ -11,7 +11,7 @@ function update(data) {
 	for (var i = 0; i < data.length; i++) {
 		dps.push({
 			x: Date.parse(data[i][0]),
-			y: data[i][1] * 1000000
+			y: data[i][1]
 		});
 	}
 	timestamp = Date.parse(data[data.length - 1][0]);
@@ -24,7 +24,8 @@ function update(data) {
 	// }
 	// chart.options.axisY.maximum = max;
 	// chart.options.axisY.minimum = min;
-	chart.render();
+	// chart.render();
+	canvas.update(dps);
 }
 
 function fetch() {
@@ -56,6 +57,10 @@ $(document).ready(function() {
 			dataPoints: dps
 		}]
 	});
+
+	canvas.init(document.getElementById('canvas'));
+	
+	// canvas.test();
 
 	fetch();
 });
