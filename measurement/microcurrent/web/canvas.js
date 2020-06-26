@@ -84,6 +84,23 @@ var canvas = {
 		this.el.height = window.innerHeight - document.getElementById('toolbar').clientHeight;
 	},
 
+	autoAdjust: function() {
+		if (data.length < 2) {
+			return;
+		}
+
+		var Imin = 0;
+		var Imax = 0;
+		for (var v in data) {
+			Imax = Imax < v.y ? v.y : Imax;
+			Imin = Imin > v.y ? v.y : Imin;
+		}
+
+		/* select boxes */
+		document.getElementById('step-x').value = canvas.x.step;
+		document.getElementById('step-y').value = canvas.y.step;
+	},
+
 	update: function(data) {
 		/* somewhere under the data */
 		if (data === undefined) {
@@ -108,7 +125,7 @@ var canvas = {
 		this.ctx.stroke();
 		/* y grid down and then up */
 		this.ctx.beginPath();
-		this.ctx.font = "24px monospace";
+		this.ctx.font = '24px monospace';
 		this.ctx.strokeStyle = '#505050';
 		this.ctx.fillStyle = '#707070';
 		this.ctx.lineWidth = 0.5;
@@ -117,19 +134,19 @@ var canvas = {
 			this.ctx.lineTo(this.el.width, i);
 			this.ctx.stroke();
 
-			this.ctx.fillText('-' + util.human(v, 1) + util.prefix(v) + 'A', 10, i - 10);
+			this.ctx.fillText('-' + util.human(v, 3) + util.prefix(v) + 'A', 10, i - 10);
 		}
 		for (var i = this.y.middle - this.pixels_per_step, v = this.y.steps[this.y.step]; i >= 0; i -= this.pixels_per_step, v += this.y.steps[this.y.step]) {
 			this.ctx.moveTo(0, i);
 			this.ctx.lineTo(this.el.width, i);
 			this.ctx.stroke();
 
-			this.ctx.fillText('+' + util.human(v, 1) + util.prefix(v) + 'A', 10, i + 30);
+			this.ctx.fillText('+' + util.human(v, 3) + util.prefix(v) + 'A', 10, i + 30);
 		}
 
 		/* x grid */
 		this.ctx.beginPath();
-		this.ctx.font = "18px monospace";
+		this.ctx.font = '18px monospace';
 		this.ctx.strokeStyle = '#505050';
 		this.ctx.fillStyle = '#707070';
 		this.ctx.lineWidth = 0.5;
@@ -186,9 +203,9 @@ var canvas = {
 			this.ctx.fillStyle = '#a0a0ff';
 			this.ctx.shadowColor = '#000000';
 			this.ctx.shadowBlur = 7;
-			this.ctx.font = "128px monospace";
+			this.ctx.font = '128px monospace';
 			this.ctx.fillText(Iavg, this.el.width - 40, this.el.height - 40);
-			this.ctx.font = "48px monospace";
+			this.ctx.font = '48px monospace';
 			this.ctx.fillText(Iavgall + ' Ø', this.el.width - 40, this.el.height - 160);
 			this.ctx.fillText(Imin + ' ↓', this.el.width - 40, this.el.height - 220);
 			this.ctx.fillText(Imax + ' ↑', this.el.width - 40, this.el.height - 280);
@@ -240,7 +257,7 @@ var canvas = {
 
 		if (e.ctrlKey) {
 			offset = canvas.y.middle - e.offsetY;
-			offset *=  canvas.y.steps[canvas.y.step];
+			offset *= canvas.y.steps[canvas.y.step];
 		} else {
 			/* save original x offset in seconds where mouse was */
 			offset = canvas.el.width - canvas.x.end - e.offsetX;
