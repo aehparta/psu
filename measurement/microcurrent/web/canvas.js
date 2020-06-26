@@ -141,19 +141,54 @@ var canvas = {
 			this.ctx.fillText(util.secondsToHuman(v), i + 10, 30);
 		}
 
-		/* data */
+		/* following are only shown if there is enough data */
 		if (data.length >= 2) {
+			/* latest timestamp needed later */
+			var t_end = data[data.length - 1].x;
+
+			/* calculate values from data */
+			var Iavg = 0;
+			var Imin = 0;
+			var Imax = 0;
+			var count = 0;
+			for (var i = data.length - 1; i >= 0; i--) {
+				if ((t_end - data[i].x) <= 1.0) {
+					Iavg += data[i].y;
+					count++;
+				}
+				Imax = data[i].y > Imax ? data[i].y : Imax;
+				Imin = data[i].y < Imin ? data[i].y : Imin;
+			}
+			Iavg /= count;
+			Iavg = Math.abs(Iavg) < 0.001 ? Number(Iavg * 1000000).toFixed(1) + 'μA' : Number(Iavg * 1000).toFixed(3) + 'mA';
+			Imax = Math.abs(Imax) < 0.001 ? Number(Imax * 1000000).toFixed(1) + 'μA' : Number(Imax * 1000).toFixed(3) + 'mA';
+			Imin = Math.abs(Imin) < 0.001 ? Number(Imin * 1000000).toFixed(1) + 'μA' : Number(Imin * 1000).toFixed(3) + 'mA';
+
+			/* update data to canvas */
 			this.ctx.beginPath();
 			this.ctx.strokeStyle = '#00ff00';
 			this.ctx.lineWidth = 1;
 			this.ctx.moveTo(this.el.width - this.x.end, this.y.middle - (data[data.length - 1].y * this.pixels_per_step / this.y.steps[this.y.step]));
-			var t_end = data[data.length - 1].x;
 			for (var i = data.length - 2; i >= 0; i--) {
 				var x = this.el.width - this.x.end - ((t_end - data[i].x) * this.pixels_per_step / this.x.steps[this.x.step]);
 				var y = this.y.middle - (data[i].y * this.pixels_per_step / this.y.steps[this.y.step]);
 				this.ctx.lineTo(x, y);
 			}
 			this.ctx.stroke();
+
+			/* display multimeter style values */
+			this.ctx.save();
+			this.ctx.globalAlpha = 0.7;
+			this.ctx.textAlign = 'end';
+			this.ctx.fillStyle = '#a0a0ff';
+			this.ctx.shadowColor = '#000000';
+			this.ctx.shadowBlur = 7;
+			this.ctx.font = "128px monospace";
+			this.ctx.fillText(Iavg, this.el.width - 40, this.el.height - 40);
+			this.ctx.font = "48px monospace";
+			this.ctx.fillText(Imin + '↓', this.el.width - 40, this.el.height - 160);
+			this.ctx.fillText(Imax + '↑', this.el.width - 40, this.el.height - 220);
+			this.ctx.restore();
 		}
 
 		this.ctx.restore();
@@ -173,10 +208,7 @@ var canvas = {
 			return;
 		}
 
-		var end = canvas.drag.x_end - (e.offsetX - canvas.drag.x);
-		if (end < canvas.pixels_per_step) {
-			canvas.x.end = end;
-		}
+		canvas.x.end = canvas.drag.x_end - (e.offsetX - canvas.drag.x);
 		canvas.y.middle = canvas.drag.y_middle + (e.offsetY - canvas.drag.y);
 		canvas.update();
 	},
@@ -195,14 +227,33 @@ var canvas = {
 				canvas.x.step = (canvas.x.step + 1) < canvas.x.steps.length ? canvas.x.step + 1 : canvas.x.step;
 			}
 		}
-		canvas.update();
 	},
 
 	zoomMouse: function(e) {
 		e.preventDefault();
+
+		var offset = 0;
+
+		if (e.ctrlKey) {} else {
+			/* save original x offset in seconds where mouse was */
+			var offset = canvas.el.width - canvas.x.end - e.offsetX;
+			offset = offset < 0 ? 0 : offset;
+			offset = offset / canvas.pixels_per_step * canvas.x.steps[canvas.x.step];
+		}
+
+		/* zoom */
 		canvas.zoom(e.ctrlKey ? 'y' : 'x', e.deltaY > 0 ? 'out' : 'in');
 		document.getElementById('step-x').value = canvas.x.step;
 		document.getElementById('step-y').value = canvas.y.step;
+
+		if (e.ctrlKey) {} else {
+			/* set view x position to the same second marker where mouse was before zoom */
+			offset = offset * canvas.pixels_per_step / canvas.x.steps[canvas.x.step];
+			console.log(offset);
+			canvas.x.end = canvas.el.width - e.offsetX - offset;
+		}
+
+		canvas.update();
 	},
 
 	zoomSelectX: function(e) {

@@ -34,11 +34,15 @@ var util = {
 		'u': 'n'
 	}],
 
-	divider: function(value) {
+	divider: function(value, min) {
 		/* calculate divider */
 		var v = Math.abs(value);
 		for (var i in this.unit_prefixes) {
 			var p = this.unit_prefixes[i];
+			/* check for minimum divider */
+			if (min !== undefined && min > p.d) {
+				continue;
+			}
 			/* check if this is correct divider */
 			if (p.d <= v && (v < (p.d * 1000) || p.d >= 1e18)) {
 				return p;
@@ -50,20 +54,17 @@ var util = {
 		};
 	},
 
-	prefix: function(value) {
-		return this.divider(value).u;
+	prefix: function(value, min) {
+		return this.divider(value, min).u;
 	},
 
-	human: function(value, decimals) {
-		if (decimals === undefined) {
-			decimals = 0;
-		}
-
+	human: function(value, decimals, min) {
 		/* get unit prefix divider */
-		var p = this.divider(value);
+		var p = this.divider(value, min);
 		/* calculate value using unit prefix divider */
 		var value = value / p.d;
 		/* cut to max decimals and remove zeros */
+		decimals = decimals === undefined ? 0 : decimals;
 		value = value.toFixed(decimals);
 		if (value.includes('.')) {
 			value = this.rtrim(value, '0');

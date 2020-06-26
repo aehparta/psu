@@ -5,6 +5,7 @@
     <title>
       Micrometer
     </title>
+    <link rel="stylesheet" href="fontawesome.min.css"/>
     <link rel="stylesheet" href="site.css"/>
   </head>
   <body>
@@ -12,10 +13,13 @@
       <select id="step-y"></select>
       <select id="step-x"></select>
       <button id="pause">
-        | |
+        <i class="fas fa-pause"></i>
       </button>
     </div>
     <canvas id="canvas"></canvas>
+    <div id="loading">
+        <i class="fas fa-circle-notch fa-spin"></i>
+    </div>
     <script type="text/javascript" src="jquery-3.5.1.min.js"></script>
     <script type="text/javascript" src="utils.js"></script>
     <script type="text/javascript" src="canvas.js"></script>

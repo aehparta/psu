@@ -5,7 +5,7 @@
   top: 0px;
   bottom: 0px;
   z-index: 0;
-  background: #303030;
+  background: #203020;
 }
 
 #toolbar {
@@ -15,17 +15,20 @@
   top: 0px;
   z-index: 1;
   background: #005050;
-  font-size: 24pt;
-  color: #c0c0c0;
-  height: 40px;
+  height: 64px;
+  padding-left: 20px;
+  /*padding-right: 20px;*/
 }
 
 #toolbar select {
   width: 150px;
-  font-size: 24pt;
+  font-size: 40px;
   background: #005050;
   border: 0px;
+  height: 64px;
   text-align-last: right;
+  color: #000000;
+  float: left;
 }
 
 #toolbar select option {
@@ -35,9 +38,26 @@
 #toolbar button {
   float: right;
   border: 0px;
-  font-size: 24pt;
-  font-weight: 900;
-  width: 40px;
+  font-size: 40px;
+  width: 64px;
+  height: 64px;
   vertical-align: center;
   background: #009090;
+}
+
+#loading {
+  position: fixed;
+  left: 0px;
+  right: 0px;
+  top: 0px;
+  bottom: 0px;
+  z-index: 999;
+  background: #305030;
+  opacity: 0.5;
+  text-align: center;
+}
+
+#loading .fas {
+  margin-top: 128px;
+  font-size: 128px;
 }
