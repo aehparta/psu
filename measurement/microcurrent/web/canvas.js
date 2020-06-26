@@ -234,11 +234,14 @@ var canvas = {
 
 		var offset = 0;
 
-		if (e.ctrlKey) {} else {
+		if (e.ctrlKey) {
+			offset = canvas.y.middle - e.offsetY;
+			offset *=  canvas.y.steps[canvas.y.step];
+		} else {
 			/* save original x offset in seconds where mouse was */
-			var offset = canvas.el.width - canvas.x.end - e.offsetX;
+			offset = canvas.el.width - canvas.x.end - e.offsetX;
 			offset = offset < 0 ? 0 : offset;
-			offset = offset / canvas.pixels_per_step * canvas.x.steps[canvas.x.step];
+			offset *= canvas.x.steps[canvas.x.step];
 		}
 
 		/* zoom */
@@ -246,10 +249,12 @@ var canvas = {
 		document.getElementById('step-x').value = canvas.x.step;
 		document.getElementById('step-y').value = canvas.y.step;
 
-		if (e.ctrlKey) {} else {
+		if (e.ctrlKey) {
+			offset /= canvas.y.steps[canvas.y.step];
+			canvas.y.middle = e.offsetY + offset;
+		} else if (offset > 0) {
 			/* set view x position to the same second marker where mouse was before zoom */
-			offset = offset * canvas.pixels_per_step / canvas.x.steps[canvas.x.step];
-			console.log(offset);
+			offset /= canvas.x.steps[canvas.x.step];
 			canvas.x.end = canvas.el.width - e.offsetX - offset;
 		}
 
