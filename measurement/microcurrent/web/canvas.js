@@ -147,22 +147,11 @@ var canvas = {
 			var t_end = data[data.length - 1].x;
 
 			/* calculate values from data */
-			var Iavg = 0;
-			var Imin = 0;
-			var Imax = 0;
-			var count = 0;
-			for (var i = data.length - 1; i >= 0; i--) {
-				if ((t_end - data[i].x) <= 1.0) {
-					Iavg += data[i].y;
-					count++;
-				}
-				Imax = data[i].y > Imax ? data[i].y : Imax;
-				Imin = data[i].y < Imin ? data[i].y : Imin;
-			}
-			Iavg /= count;
-			Iavg = Math.abs(Iavg) < 0.001 ? Number(Iavg * 1000000).toFixed(1) + 'μA' : Number(Iavg * 1000).toFixed(3) + 'mA';
-			Imax = Math.abs(Imax) < 0.001 ? Number(Imax * 1000000).toFixed(1) + 'μA' : Number(Imax * 1000).toFixed(3) + 'mA';
-			Imin = Math.abs(Imin) < 0.001 ? Number(Imin * 1000000).toFixed(1) + 'μA' : Number(Imin * 1000).toFixed(3) + 'mA';
+			var Iavg = data[data.length - 1].y;
+			var Iavgall = Iavg;
+			var Imin = Iavg;
+			var Imax = Iavg;
+			var Iavgcount = 1;
 
 			/* update data to canvas */
 			this.ctx.beginPath();
@@ -173,10 +162,24 @@ var canvas = {
 				var x = this.el.width - this.x.end - ((t_end - data[i].x) * this.pixels_per_step / this.x.steps[this.x.step]);
 				var y = this.y.middle - (data[i].y * this.pixels_per_step / this.y.steps[this.y.step]);
 				this.ctx.lineTo(x, y);
+
+				if ((t_end - data[i].x) <= 1.0) {
+					Iavg += data[i].y;
+					Iavgcount++;
+				}
+				Iavgall += data[i].y;
+				Imax = data[i].y > Imax ? data[i].y : Imax;
+				Imin = data[i].y < Imin ? data[i].y : Imin;
 			}
 			this.ctx.stroke();
 
 			/* display multimeter style values */
+			Iavg /= Iavgcount;
+			Iavgall /= data.length;
+			Iavg = Math.abs(Iavg) < 0.001 ? Number(Iavg * 1000000).toFixed(1) + 'μA' : Number(Iavg * 1000).toFixed(3) + 'mA';
+			Iavgall = Math.abs(Iavgall) < 0.001 ? Number(Iavgall * 1000000).toFixed(1) + 'μA' : Number(Iavgall * 1000).toFixed(3) + 'mA';
+			Imax = Math.abs(Imax) < 0.001 ? Number(Imax * 1000000).toFixed(1) + 'μA' : Number(Imax * 1000).toFixed(3) + 'mA';
+			Imin = Math.abs(Imin) < 0.001 ? Number(Imin * 1000000).toFixed(1) + 'μA' : Number(Imin * 1000).toFixed(3) + 'mA';
 			this.ctx.save();
 			this.ctx.globalAlpha = 0.7;
 			this.ctx.textAlign = 'end';
@@ -186,8 +189,9 @@ var canvas = {
 			this.ctx.font = "128px monospace";
 			this.ctx.fillText(Iavg, this.el.width - 40, this.el.height - 40);
 			this.ctx.font = "48px monospace";
-			this.ctx.fillText(Imin + '↓', this.el.width - 40, this.el.height - 160);
-			this.ctx.fillText(Imax + '↑', this.el.width - 40, this.el.height - 220);
+			this.ctx.fillText(Iavgall + ' Ø', this.el.width - 40, this.el.height - 160);
+			this.ctx.fillText(Imin + ' ↓', this.el.width - 40, this.el.height - 220);
+			this.ctx.fillText(Imax + ' ↑', this.el.width - 40, this.el.height - 280);
 			this.ctx.restore();
 		}
 
