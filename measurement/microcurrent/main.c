@@ -25,7 +25,7 @@
 
 /* calibration variables */
 #define MULTIPLIER                  (1.1845L / 16.0)
-#define OFFSET                      (-1160.0L)
+#define OFFSET                      (-1140.0L)
 
 /* print info to display/console this often, seconds */
 #define INTERVAL                    0.5
