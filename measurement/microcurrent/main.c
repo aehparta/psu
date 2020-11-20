@@ -72,7 +72,15 @@ struct opt_option opt_all[] = {
 /* globals */
 struct spi_master master;
 struct spi_device device;
+
+struct i2c_master i2c;
+pthread_mutex_t i2c_lock;
+struct i2c_device mcp4725;
+
+struct display display;
+uint8_t display_buffer[SSD1306_BUFFER_SIZE];
 pthread_t display_thread;
+
 int influxdb_udp_socket = -1;
 struct sockaddr_in influxdb_addr;
 
@@ -136,15 +144,7 @@ void pwm_quit(void)
 /* display update is threaded since it is low priority */
 void *display_thread_func(void *p)
 {
-	struct display display;
-	uint8_t buffer[SSD1306_BUFFER_SIZE];
-	struct i2c_master i2c;
 	char str[32];
-
-	/* open and initialize display, exit this thread with a warning if this fails */
-	WARN_IF_R(i2c_master_open(&i2c, I2C_DEVICE, I2C_FREQUENCY, 0, 0), NULL, "unable to open i2c device");
-	WARN_IF_R(ssd1306_i2c_open(&display, &i2c, 0, 0, 0), NULL, "unable to open ssd1306 display");
-	optctl(&display, DISPLAY_OPT_SET_BUFFER, buffer);
 
 	/* start filling display with values */
 	while (exec) {
@@ -173,12 +173,12 @@ void *display_thread_func(void *p)
 		draw_string(&display, &g_sFontFixed6x8, str, -1, 0, 56, true);
 
 		/* not really a need to update display very often */
+		pthread_mutex_lock(&i2c_lock);
 		display_update(&display);
+		pthread_mutex_unlock(&i2c_lock);
 		os_sleepf(0.3);
 	}
 
-	display_close(&display);
-	i2c_master_close(&i2c);
 	return NULL;
 }
 
@@ -191,8 +191,28 @@ int p_init(char argc, char *argv[])
 	/* setup pwm */
 	IF_R(pwm_init(), 1);
 
-	/* display */
-	pthread_create(&display_thread, NULL, display_thread_func, NULL);
+	/* i2c master */
+	if (i2c_master_open(&i2c, I2C_DEVICE, I2C_FREQUENCY, 0, 0)) {
+		WARN_MSG("i2c master open failed, device: %s", I2C_DEVICE);
+	} else {
+		/* mutex */
+		pthread_mutex_init(&i2c_lock, NULL);
+
+		/* display */
+		if (ssd1306_i2c_open(&display, &i2c, 0, 0, 0)) {
+			WARN_MSG("unable to open ssd1306 display");
+		} else {
+			optctl(&display, DISPLAY_OPT_SET_BUFFER, display_buffer);
+			pthread_create(&display_thread, NULL, display_thread_func, NULL);
+		}
+
+		/* regulator adjust */
+		if (mcp4725_open(&mcp4725, &i2c, MCP4725_ADDR_A2)) {
+			WARN_MSG("unable to open regulator adjusting DAC");
+		} else {
+			mcp4724_wr(&mcp4725, 0, 2048);
+		}
+	}
 
 	/* irq gpio */
 	gpio_input(IRQ_PIN);
@@ -249,11 +269,14 @@ void p_exit(int code)
 	httpd_quit();
 	exec = false;
 	pthread_join(display_thread, NULL);
+	display_close(&display);
+	i2c_master_close(&i2c);
 	mcp356x_close(&device);
 	spi_master_close(&master);
 	pwm_quit();
 	log_quit();
 	os_quit();
+	pthread_mutex_destroy(&i2c_lock);
 	exit(code);
 }
 
