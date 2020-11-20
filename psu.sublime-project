@@ -1,8 +1,11 @@
 {
-  "folders":
-  [
-    {
-      "path": "."
-    }
-  ]
+	"folders":
+	[
+		{
+			"path": "."
+		},
+		{
+			"path": "/run/user/1000/gvfs/sftp:host=pl500w/home/aehparta/code/libe"
+		}
+	]
 }

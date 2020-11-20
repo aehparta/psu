@@ -24,8 +24,8 @@
 
 
 /* calibration variables */
-#define MULTIPLIER                  (1.0785L / 16.0)
-#define OFFSET                      1370.0L
+#define MULTIPLIER                  (1.1845L / 16.0)
+#define OFFSET                      (-1160.0L)
 
 /* print info to display/console this often, seconds */
 #define INTERVAL                    0.5
@@ -41,7 +41,7 @@
 #define PWM_ENABLE_FILE             "/sys/class/pwm/pwmchip0/pwm0/enable"
 
 /* interrupt pin for MCP3561 sample ready */
-#define IRQ_PIN                     19
+#define IRQ_PIN                     10
 
 /* I2C is for display */
 #define I2C_DEVICE                  "/dev/i2c-0"
@@ -229,6 +229,9 @@ int p_init(char argc, char *argv[])
 	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
 	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3); /* continous conversion */
 	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1); /* interrupt only on sample ready */
+
+	/* default channel 0 with ground being negative */
+	mcp356x_ch(&device, 0x01);
 
 	/* wait for the device to settle */
 	os_sleepf(0.1);
