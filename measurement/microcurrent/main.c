@@ -243,7 +243,7 @@ int p_init(char argc, char *argv[])
 	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0); /* external clock */
 	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3); /* continuous conversion */
 	optwr_u8(&device, MCP356X_OPT_PRE, 0x0); /* no pre-scaling */
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_4096); /* 4096 OSR */
+	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_1024); /* 1024 OSR seems to be nice trade-off between too many samples too often and too little detail */
 	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
 	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
