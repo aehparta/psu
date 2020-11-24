@@ -224,7 +224,7 @@ int p_init(char argc, char *argv[])
 	influxdb_addr.sin_addr.s_addr = inet_addr(opt_get('i'));
 	influxdb_addr.sin_port = htons(opt_get_int('p'));
 
-	/* open ft232h type device and try to see if it has a nrf24l01+ connected to it through mpsse-spi */
+	/* open spi */
 	ERROR_IF_R(spi_master_open(
 	               &master, /* must give pre-allocated spi master as pointer */
 	               NULL, /* context depends on platform */
