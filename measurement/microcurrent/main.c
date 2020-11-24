@@ -141,7 +141,7 @@ void pwm_quit(void)
 	sys_class_write_int(PWM_UNEXPORT_FILE, 0);
 }
 
-/* display update is threaded since it is low priority */
+/* display update thread */
 void *display_thread_func(void *p)
 {
 	char str[32];
