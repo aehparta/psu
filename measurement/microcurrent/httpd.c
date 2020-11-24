@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <microhttpd.h>
 #include "httpd.h"
+#include "ldo.h"
 
 
 static struct MHD_Daemon *daemon_handle;
@@ -77,6 +78,32 @@ static int httpd_get_default(struct MHD_Connection *connection, const char *url)
 	return err;
 }
 
+static int httpd_voltage_get(struct MHD_Connection *connection)
+{
+	int err;
+	struct MHD_Response *response;
+	char data[32];
+	const char *v = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "v");
+
+	/* set voltage if given as query parameter */
+	if (v) {
+		char *p = NULL;
+		float voltage = strtof(v, &p);
+		if (v != p) {
+			ldo_voltage(voltage);
+		}
+	}
+
+	/* return current voltage */
+	sprintf(data, "%0.3f", ldo_voltage(NAN));
+	response = MHD_create_response_from_buffer(strlen(data), (void *)data, MHD_RESPMEM_MUST_COPY);
+	MHD_add_response_header(response, "Content-Type", "text/plain");
+	err = MHD_queue_response(connection, MHD_HTTP_OK, response);
+	MHD_destroy_response(response);
+
+	return err;
+}
+
 static int httpd_request_handler(void *cls, struct MHD_Connection *connection,
                                  const char *url,
                                  const char *method, const char *version,
@@ -86,6 +113,11 @@ static int httpd_request_handler(void *cls, struct MHD_Connection *connection,
 	/* only GET can get through here */
 	if (strcmp(method, "GET") != 0) {
 		return httpd_404(connection, MHD_HTTP_NOT_FOUND);
+	}
+
+	/* ldo voltage set/get */
+	if (strcmp(url, "/voltage") == 0) {
+		return httpd_voltage_get(connection);
 	}
 
 	/* default GET handler */

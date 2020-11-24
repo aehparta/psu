@@ -12,13 +12,23 @@
     <div id="toolbar">
       <select id="step-y"></select>
       <select id="step-x"></select>
-      <button id="pause">
+      <input id="voltage" value=""/>
+      <select id="voltages"></select>
+      <div id="voltage-adjust">
+        <button id="voltage-up">
+          <i class="fas fa-angle-up"></i>
+        </button>
+        <button id="voltage-down">
+          <i class="fas fa-angle-down"></i>
+        </button>
+      </div>
+      <button id="pause" class="right">
         <i class="fas fa-pause"></i>
       </button>
     </div>
     <canvas id="canvas"></canvas>
     <div id="loading">
-        <i class="fas fa-circle-notch fa-spin"></i>
+      <i class="fas fa-circle-notch fa-spin"></i>
     </div>
     <script type="text/javascript" src="jquery-3.5.1.min.js"></script>
     <script type="text/javascript" src="utils.js"></script>

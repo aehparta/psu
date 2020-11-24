@@ -21,13 +21,14 @@
 #include <libe/libe.h>
 #include "httpd.h"
 #include "opt.h"
+#include "ldo.h"
 
 
 /* calibration variables */
 #define MULTIPLIER                  (1.1845L / 16.0)
 #define OFFSET                      (-1140.0L)
 
-/* print info to display/console this often, seconds */
+/* print info to terminal this often, seconds */
 #define INTERVAL                    0.5
 
 /* PWM is used to generate clock for MCP3561 */
@@ -43,9 +44,9 @@
 /* interrupt pin for MCP3561 sample ready */
 #define IRQ_PIN                     10
 
-/* I2C is for display */
+/* I2C is for display and voltage setting */
 #define I2C_DEVICE                  "/dev/i2c-0"
-#define I2C_FREQUENCY               100000
+#define I2C_FREQUENCY               400000
 
 
 /* command line options */
@@ -70,19 +71,18 @@ struct opt_option opt_all[] = {
 };
 
 /* globals */
-struct spi_master master;
-struct spi_device device;
+static struct spi_master master;
+static struct spi_device device;
 
-struct i2c_master i2c;
-pthread_mutex_t i2c_lock;
-struct i2c_device mcp4725;
+static struct i2c_master i2c;
+static pthread_mutex_t i2c_lock;
 
-struct display display;
-uint8_t display_buffer[SSD1306_BUFFER_SIZE];
-pthread_t display_thread;
+static struct display display;
+static uint8_t display_buffer[SSD1306_BUFFER_SIZE];
+static pthread_t display_thread;
 
-int influxdb_udp_socket = -1;
-struct sockaddr_in influxdb_addr;
+static int influxdb_udp_socket = -1;
+static struct sockaddr_in influxdb_addr;
 
 /* written from main and read from display update */
 static volatile float I = 0, Iavg = 0, Ipeak = 0;
@@ -206,11 +206,11 @@ int p_init(char argc, char *argv[])
 			pthread_create(&display_thread, NULL, display_thread_func, NULL);
 		}
 
-		/* regulator adjust */
-		if (mcp4725_open(&mcp4725, &i2c, MCP4725_ADDR_A2)) {
-			WARN_MSG("unable to open regulator adjusting DAC");
+		/* adjustable ldo */
+		if (ldo_init(&i2c, &i2c_lock)) {
+			WARN_MSG("unable to open adjustable regulator DAC");
 		} else {
-			mcp4724_wr(&mcp4725, 0, 2048);
+			DEBUG_MSG("LDO voltage: %0.3f V", ldo_voltage(NAN));
 		}
 	}
 
@@ -243,7 +243,7 @@ int p_init(char argc, char *argv[])
 	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0); /* external clock */
 	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3); /* continuous conversion */
 	optwr_u8(&device, MCP356X_OPT_PRE, 0x0); /* no pre-scaling */
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_1024); /* 1024 OSR seems to be nice trade-off between too many samples too often and too little detail */
+	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_4096); /* 4096 OSR seems to be nice trade-off between too many samples too often and too little detail */
 	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
 	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */

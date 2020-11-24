@@ -20,15 +20,20 @@
   /*padding-right: 20px;*/
 }
 
-#toolbar select {
+#toolbar select,
+#toolbar input {
   width: 150px;
+  height: 64px;
+  float: left;
   font-size: 40px;
   background: #005050;
   border: 0px;
-  height: 64px;
   text-align-last: right;
   color: #000000;
-  float: left;
+}
+
+#toolbar input {
+  padding: 0;
 }
 
 #toolbar select option {
@@ -36,7 +41,7 @@
 }
 
 #toolbar button {
-  float: right;
+  float: left;
   border: 0px;
   font-size: 40px;
   width: 64px;
@@ -60,4 +65,32 @@
 #loading .fas {
   margin-top: 128px;
   font-size: 128px;
+}
+
+#toolbar .right {
+  float: right;
+}
+
+#toolbar #voltage {
+	font-size: 32px;
+}
+
+#toolbar #voltages {
+  width: 20px;
+}
+
+#toolbar #voltage-adjust {
+  width: 32px;
+  float: left;
+}
+
+#toolbar #voltage-up,
+#toolbar #voltage-down {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  font-family: FontAwesome;
+  font-size: 30px;
 }
