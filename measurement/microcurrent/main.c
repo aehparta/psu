@@ -26,10 +26,12 @@
 
 /* calibration variables */
 #define MULTIPLIER                  (1.1845L / 16.0)
-#define OFFSET                      (-1140.0L)
+#define OFFSET                      (-340.0L)
+// #define MULTIPLIER                  (1.1845L / 16.0)
+// #define OFFSET                      (-35.0L)
 
 /* print info to terminal this often, seconds */
-#define INTERVAL                    0.5
+#define INTERVAL                    1.0
 
 /* PWM is used to generate clock for MCP3561 */
 #define PWM_PERIOD                  200
@@ -243,15 +245,15 @@ int p_init(char argc, char *argv[])
 	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0); /* external clock */
 	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3); /* continuous conversion */
 	optwr_u8(&device, MCP356X_OPT_PRE, 0x0); /* no pre-scaling */
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_4096); /* 4096 OSR seems to be nice trade-off between too many samples too often and too little detail */
+	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_16384); /* 4096 OSR seems to be nice trade-off between too many samples too often and too little detail */
 	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
-	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
+	// optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
 	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3); /* continous conversion */
 	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1); /* interrupt only on sample ready */
 
 	/* default channel 0 with ground being negative */
-	mcp356x_ch(&device, 0x01);
+	// mcp356x_ch(&device, 0x08);
 
 	/* wait for the device to settle */
 	os_sleepf(0.1);
@@ -302,6 +304,7 @@ int main(int argc, char *argv[])
 	os_time_t t = os_timef() + INTERVAL;
 	struct timespec tp;
 	int32_t x;
+	int64_t xx = 0;
 	double xd;
 	char line[1024];
 	int n;
@@ -318,15 +321,16 @@ int main(int argc, char *argv[])
 		clock_gettime(CLOCK_REALTIME, &tp);
 
 		/* get sample */
-		x = mcp356x_rd(&device) / 256.0L + OFFSET;
-		xd = ((double)x / (double)0x7fffff * MULTIPLIER);
+		x = mcp356x_rd(&device);
+		xx += x;
+		xd = (((double)x /256.0L + OFFSET) / (double)0x7fffff * MULTIPLIER);
 
 		/* average calculation */
 		sum += xd;
 		count++;
 
 		/* send to influxdb */
-		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", xd, tp.tv_sec, tp.tv_nsec);
+		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", xd - ((ldo_voltage_cached() - 0.25) * 0.5 / 1000000.0), tp.tv_sec, tp.tv_nsec);
 		sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
 
 		/* update value later shown on display with interval so we get an average */
@@ -334,7 +338,8 @@ int main(int argc, char *argv[])
 			/* calculate average */
 			sum /= count;
 			I = (float)sum;
-			printf("%+12.1f uA, samples: %d\n", sum * 1000000.0, count);
+			printf("%+12.2f uA, samples: %d, %lld\n", (sum * 1000000.0) - ((ldo_voltage_cached() - 0.25) * 0.5), count, xx /count);
+			xx = 0;
 
 			/* reset all */
 			sum = 0.0;

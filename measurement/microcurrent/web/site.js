@@ -1,7 +1,7 @@
 var influxdb_query_uri = 'http://' + location.hostname + ':8086/query?db=microcurrent&q=';
 var dps = [];
 var t_div = 0;
-var t_max = 60;
+var t_max = (60);
 var timestamp = Date.now() - (t_max * 1000);
 var min = -0.000007,
 	max = -0.000004;
