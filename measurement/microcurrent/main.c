@@ -248,7 +248,7 @@ int p_init(char argc, char *argv[])
 	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_16384); /* 4096 OSR seems to be nice trade-off between too many samples too often and too little detail */
 	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
-	// optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
+	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
 	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3); /* continous conversion */
 	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1); /* interrupt only on sample ready */
 
