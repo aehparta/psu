@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
 		count++;
 
 		/* send to influxdb */
-		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", xd - ((ldo_voltage_cached() - 0.25) * 0.5 / 1000000.0), tp.tv_sec, tp.tv_nsec);
+		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", (double)x / 1000000.0, tp.tv_sec, tp.tv_nsec);
 		sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
 
 		/* update value later shown on display with interval so we get an average */
