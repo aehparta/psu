@@ -193,10 +193,10 @@ var canvas = {
 			/* display multimeter style values */
 			Iavg /= Iavgcount;
 			Iavgall /= data.length;
-			Iavg = Math.abs(Iavg) < 0.001 ? Number(Iavg * 1000000).toFixed(1) + 'μA' : Number(Iavg * 1000).toFixed(3) + 'mA';
-			Iavgall = Math.abs(Iavgall) < 0.001 ? Number(Iavgall * 1000000).toFixed(1) + 'μA' : Number(Iavgall * 1000).toFixed(3) + 'mA';
-			Imax = Math.abs(Imax) < 0.001 ? Number(Imax * 1000000).toFixed(1) + 'μA' : Number(Imax * 1000).toFixed(3) + 'mA';
-			Imin = Math.abs(Imin) < 0.001 ? Number(Imin * 1000000).toFixed(1) + 'μA' : Number(Imin * 1000).toFixed(3) + 'mA';
+			Iavg = Math.abs(Iavg) < 0.001 ? Number(Iavg * 1000000).toFixed(2) + 'μA' : Number(Iavg * 1000).toFixed(3) + 'mA';
+			Iavgall = Math.abs(Iavgall) < 0.001 ? Number(Iavgall * 1000000).toFixed(2) + 'μA' : Number(Iavgall * 1000).toFixed(3) + 'mA';
+			Imax = Math.abs(Imax) < 0.001 ? Number(Imax * 1000000).toFixed(2) + 'μA' : Number(Imax * 1000).toFixed(3) + 'mA';
+			Imin = Math.abs(Imin) < 0.001 ? Number(Imin * 1000000).toFixed(2) + 'μA' : Number(Imin * 1000).toFixed(3) + 'mA';
 			this.ctx.save();
 			this.ctx.globalAlpha = 0.7;
 			this.ctx.textAlign = 'end';

@@ -304,7 +304,6 @@ int main(int argc, char *argv[])
 	os_time_t t = os_timef() + INTERVAL;
 	struct timespec tp;
 	int32_t x;
-	int64_t xx = 0;
 	double xd;
 	char line[1024];
 	int n;
@@ -320,31 +319,37 @@ int main(int argc, char *argv[])
 		/* get timestamp as soon as possible */
 		clock_gettime(CLOCK_REALTIME, &tp);
 
-		/* get sample */
-		x = mcp356x_rd(&device);
-		xx += x;
-		xd = (((double)x /256.0L + OFFSET) / (double)0x7fffff * MULTIPLIER);
+		/* use for offset */
+		if (0) {
+			x = mcp356x_rd(&device) - 96650;
+			/* send to influxdb */
+			n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", (double)x / 1000000.0, tp.tv_sec, tp.tv_nsec);
+			sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
+		} else {
+			/* get sample */
+			x = mcp356x_rd(&device) - 96650;
+			xd = (double)x / 1000000.0 / 28770.0;
 
-		/* average calculation */
-		sum += xd;
-		count++;
+			/* average calculation */
+			sum += xd;
+			count++;
 
-		/* send to influxdb */
-		n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", (double)x / 1000000.0, tp.tv_sec, tp.tv_nsec);
-		sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
+			/* send to influxdb */
+			n = snprintf(line, sizeof(line), "measurements I=%.9lf %lu%09lu\n", (double)xd, tp.tv_sec, tp.tv_nsec);
+			sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
 
-		/* update value later shown on display with interval so we get an average */
-		if (t < os_timef()) {
-			/* calculate average */
-			sum /= count;
-			I = (float)sum;
-			printf("%+12.2f uA, samples: %d, %lld\n", (sum * 1000000.0) - ((ldo_voltage_cached() - 0.25) * 0.5), count, xx /count);
-			xx = 0;
+			/* update value later shown on display with interval so we get an average */
+			if (t < os_timef()) {
+				/* calculate average */
+				sum /= count;
+				I = (float)sum;
+				printf("%+12.2f uA, samples: %d\n", sum * 1000000.0, count);
 
-			/* reset all */
-			sum = 0.0;
-			count = 0;
-			t += INTERVAL;
+				/* reset all */
+				sum = 0.0;
+				count = 0;
+				t += INTERVAL;
+			}
 		}
 	}
 
