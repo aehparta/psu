@@ -1,7 +1,7 @@
 
 # Microcurrent
 
-MCP3561 based implementation of logging current meter with a range from 67 mA to 1 µA.
+MCP3561 based implementation of logging current meter with a range from 67 mA to 0.5 µA.
 
 ## Setup
 
