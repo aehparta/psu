@@ -14,6 +14,7 @@
 #include <microhttpd.h>
 #include "httpd.h"
 #include "ldo.h"
+#include "main.h"
 
 
 static struct MHD_Daemon *daemon_handle;
@@ -26,7 +27,8 @@ static int httpd_404(struct MHD_Connection *connection, int code)
 	struct MHD_Response *response;
 	static char *data = "<html><head><title>404</title></head><body><h1>404</h1></body></html>";
 	response = MHD_create_response_from_buffer(strlen(data),
-	           (void *)data, MHD_RESPMEM_PERSISTENT);
+	                                           (void *)data,
+	                                           MHD_RESPMEM_PERSISTENT);
 	MHD_add_response_header(response, "Content-Type", "text/html; charset=utf-8");
 	err = MHD_queue_response(connection, code, response);
 	MHD_destroy_response(response);
@@ -46,7 +48,8 @@ static int httpd_get_default(struct MHD_Connection *connection, const char *url)
 		url = "/index.html";
 	}
 	ext = url + strlen(url) - 1;
-	for (; ext > url && *ext != '.' ; ext--);
+	for (; ext > url && *ext != '.'; ext--)
+		;
 	ext++;
 
 	/* check filesystem */
@@ -65,9 +68,9 @@ static int httpd_get_default(struct MHD_Connection *connection, const char *url)
 	response = MHD_create_response_from_fd(st.st_size, fd);
 	if (strcmp(ext, "css") == 0) {
 		MHD_add_response_header(response, "Content-Type", "text/css; charset=utf-8");
-	} else 	if (strcmp(ext, "js") == 0) {
+	} else if (strcmp(ext, "js") == 0) {
 		MHD_add_response_header(response, "Content-Type", "application/javascript; charset=utf-8");
-	} else 	if (strcmp(ext, "json") == 0) {
+	} else if (strcmp(ext, "json") == 0) {
 		MHD_add_response_header(response, "Content-Type", "application/json; charset=utf-8");
 	} else {
 		MHD_add_response_header(response, "Content-Type", "text/html; charset=utf-8");
@@ -78,7 +81,7 @@ static int httpd_get_default(struct MHD_Connection *connection, const char *url)
 	return err;
 }
 
-static int httpd_voltage_get(struct MHD_Connection *connection)
+static int httpd_voltage(struct MHD_Connection *connection)
 {
 	int err;
 	struct MHD_Response *response;
@@ -104,11 +107,33 @@ static int httpd_voltage_get(struct MHD_Connection *connection)
 	return err;
 }
 
-static int httpd_request_handler(void *cls, struct MHD_Connection *connection,
-                                 const char *url,
-                                 const char *method, const char *version,
-                                 const char *upload_data,
-                                 size_t *upload_data_size, void **con_cls)
+static int httpd_osr(struct MHD_Connection *connection)
+{
+	int err;
+	struct MHD_Response *response;
+	char data[32];
+	const char *v = MHD_lookup_connection_value(connection, MHD_GET_ARGUMENT_KIND, "osr");
+
+	/* set voltage if given as query parameter */
+	if (v) {
+		char *p = NULL;
+		long osr = strtol(v, &p, 10);
+		if (v != p && osr > 0 && osr <= MCP356X_OSR_98304) {
+			osr_set((uint8_t)osr);
+		}
+	}
+
+	/* return current voltage */
+	sprintf(data, "%d", osr_get());
+	response = MHD_create_response_from_buffer(strlen(data), (void *)data, MHD_RESPMEM_MUST_COPY);
+	MHD_add_response_header(response, "Content-Type", "text/plain");
+	err = MHD_queue_response(connection, MHD_HTTP_OK, response);
+	MHD_destroy_response(response);
+
+	return err;
+}
+
+static int httpd_request_handler(void *cls, struct MHD_Connection *connection, const char *url, const char *method, const char *version, const char *upload_data, size_t *upload_data_size, void **con_cls)
 {
 	/* only GET can get through here */
 	if (strcmp(method, "GET") != 0) {
@@ -117,7 +142,12 @@ static int httpd_request_handler(void *cls, struct MHD_Connection *connection,
 
 	/* ldo voltage set/get */
 	if (strcmp(url, "/voltage") == 0) {
-		return httpd_voltage_get(connection);
+		return httpd_voltage(connection);
+	}
+
+	/* osr set/get */
+	if (strcmp(url, "/osr") == 0) {
+		return httpd_osr(connection);
 	}
 
 	/* default GET handler */
@@ -146,8 +176,12 @@ int httpd_start(char *address, uint16_t port, char *root)
 {
 	www_root = strdup(root);
 	daemon_handle = MHD_start_daemon(MHD_USE_EPOLL_INTERNAL_THREAD | MHD_USE_ERROR_LOG | MHD_ALLOW_UPGRADE,
-	                                 port, NULL, NULL,
-	                                 &httpd_request_handler, NULL, MHD_OPTION_END);
+	                                 port,
+	                                 NULL,
+	                                 NULL,
+	                                 &httpd_request_handler,
+	                                 NULL,
+	                                 MHD_OPTION_END);
 	if (!daemon_handle) {
 		return -1;
 	}

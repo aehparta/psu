@@ -22,33 +22,34 @@
 #include "httpd.h"
 #include "opt.h"
 #include "ldo.h"
+#include "main.h"
 
 
 /* calibration variables */
-#define MULTIPLIER                  (1.1845L / 16.0)
-#define OFFSET                      (-340.0L)
+#define MULTIPLIER (1.1845L / 16.0)
+#define OFFSET (-340.0L)
 // #define MULTIPLIER                  (1.1845L / 16.0)
 // #define OFFSET                      (-35.0L)
 
 /* print info to terminal this often, seconds */
-#define INTERVAL                    1.0
+#define INTERVAL 1.0
 
 /* PWM is used to generate clock for MCP3561 */
-#define PWM_PERIOD                  200
-#define PWM_DUTY_CYCLE              (PWM_PERIOD / 2)
+#define PWM_PERIOD 200
+#define PWM_DUTY_CYCLE (PWM_PERIOD / 2)
 
-#define PWM_EXPORT_FILE             "/sys/class/pwm/pwmchip0/export"
-#define PWM_UNEXPORT_FILE           "/sys/class/pwm/pwmchip0/unexport"
-#define PWM_PERIOD_FILE             "/sys/class/pwm/pwmchip0/pwm0/period"
-#define PWM_DUTY_CYCLE_FILE         "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"
-#define PWM_ENABLE_FILE             "/sys/class/pwm/pwmchip0/pwm0/enable"
+#define PWM_EXPORT_FILE "/sys/class/pwm/pwmchip0/export"
+#define PWM_UNEXPORT_FILE "/sys/class/pwm/pwmchip0/unexport"
+#define PWM_PERIOD_FILE "/sys/class/pwm/pwmchip0/pwm0/period"
+#define PWM_DUTY_CYCLE_FILE "/sys/class/pwm/pwmchip0/pwm0/duty_cycle"
+#define PWM_ENABLE_FILE "/sys/class/pwm/pwmchip0/pwm0/enable"
 
 /* interrupt pin for MCP3561 sample ready */
-#define IRQ_PIN                     10
+#define IRQ_PIN 10
 
 /* I2C is for display and voltage setting */
-#define I2C_DEVICE                  "/dev/i2c-0"
-#define I2C_FREQUENCY               400000
+#define I2C_DEVICE "/dev/i2c-0"
+#define I2C_FREQUENCY 400000
 
 
 /* command line options */
@@ -57,12 +58,10 @@ struct opt_option opt_all[] = {
 
 	/* influxdb server */
 	{
-		'i', "influxdb-ip", required_argument, 0, "127.0.0.1", NULL,
-		"remote InfluxDB server host IP address\n"
-		"(hostname not accepted, I was too lazy to implement resolve here)\n"
-		"this is for sending data through UDP, see InfluxDB UDP support for more"
-		, { OPT_FILTER_INT, 1, 65535 }
-	},
+	    'i', "influxdb-ip", required_argument, 0, "127.0.0.1", NULL, "remote InfluxDB server host IP address\n"
+	                                                                 "(hostname not accepted, I was too lazy to implement resolve here)\n"
+	                                                                 "this is for sending data through UDP, see InfluxDB UDP support for more",
+	    { OPT_FILTER_INT, 1, 65535 } },
 	{ 'p', "influxdb-port", required_argument, 0, "8089", NULL, "remote InfluxDB UDP receive port", { OPT_FILTER_INT, 1, 65535 } },
 
 	/* http server */
@@ -75,6 +74,8 @@ struct opt_option opt_all[] = {
 /* globals */
 static struct spi_master master;
 static struct spi_device device;
+
+volatile static uint8_t osr = 0xff;
 
 static struct i2c_master i2c;
 static pthread_mutex_t i2c_lock;
@@ -184,6 +185,22 @@ void *display_thread_func(void *p)
 	return NULL;
 }
 
+/* oversampling */
+uint8_t osr_get(void)
+{
+	return osr;
+}
+
+int osr_set(uint8_t value)
+{
+	if (value > MCP356X_OSR_98304) {
+		return -1;
+	}
+	osr = value;
+	optwr_u8(&device, MCP356X_OPT_OSR, value);
+	return 0;
+}
+
 /* basic initializations */
 int p_init(char argc, char *argv[])
 {
@@ -229,12 +246,13 @@ int p_init(char argc, char *argv[])
 	/* open spi */
 	ERROR_IF_R(spi_master_open(
 	               &master, /* must give pre-allocated spi master as pointer */
-	               NULL, /* context depends on platform */
+	               NULL,    /* context depends on platform */
 	               10e6,
 	               2,
 	               1,
-	               0
-	           ), -1, "failed to open spi master");
+	               0),
+	           -1,
+	           "failed to open spi master");
 	mcp356x_open(&device, &master, 3);
 
 	/* reset */
@@ -242,18 +260,18 @@ int p_init(char argc, char *argv[])
 	os_sleepf(0.1);
 
 	/* configure */
-	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0); /* external clock */
-	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3); /* continuous conversion */
-	optwr_u8(&device, MCP356X_OPT_PRE, 0x0); /* no pre-scaling */
-	optwr_u8(&device, MCP356X_OPT_OSR, MCP356X_OSR_16384); /* 4096 OSR seems to be nice trade-off between too many samples too often and too little detail */
-	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3); /* full boost */
+	optwr_u8(&device, MCP356X_OPT_CLK_SEL, 0x0);           /* external clock */
+	optwr_u8(&device, MCP356X_OPT_ADC_MODE, 0x3);          /* continuous conversion */
+	optwr_u8(&device, MCP356X_OPT_PRE, 0x0);               /* no pre-scaling */
+	optwr_u8(&device, MCP356X_OPT_BOOST, 0x3);             /* full boost */
 	optwr_u8(&device, MCP356X_OPT_GAIN, MCP356X_GAIN_X16); /* 16 GAIn */
-	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1); /* AZ_MUX offset calibration ON */
-	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3); /* continous conversion */
-	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1); /* interrupt only on sample ready */
-
-	/* default channel 0 with ground being negative */
-	// mcp356x_ch(&device, 0x08);
+	optwr_u8(&device, MCP356X_OPT_AZ_MUX, 1);              /* AZ_MUX offset calibration ON */
+	optwr_u8(&device, MCP356X_OPT_CONV_MODE, 0x3);         /* continous conversion */
+	optwr_u8(&device, MCP356X_OPT_IRQ_MODE, 0x1);          /* interrupt only on sample ready */
+	/* 4096 OSR seems to be nice trade-off
+	 * between too many samples and too little detail as default
+	 */
+	osr_set(MCP356X_OSR_4096);
 
 	/* wait for the device to settle */
 	os_sleepf(0.1);
@@ -327,7 +345,7 @@ int main(int argc, char *argv[])
 			sendto(influxdb_udp_socket, line, n, 0, (const struct sockaddr *)&influxdb_addr, sizeof(influxdb_addr));
 		} else {
 			/* get sample */
-			x = mcp356x_rd(&device) - 96650;
+			x = mcp356x_rd(&device) - 83000 - (ldo_voltage(NAN) * 13700);
 			xd = (double)x / 1000000.0 / 28770.0;
 
 			/* average calculation */
